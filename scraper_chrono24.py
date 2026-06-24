@@ -4,6 +4,7 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Callable
 from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from bs4 import BeautifulSoup
@@ -12,8 +13,6 @@ import requests
 
 from chrono24_fetch import get_soup_with_browser as _get_soup_with_browser
 from chrono24_fetch import get_soup_with_requests as _get_soup_with_requests
-from chrono24_fetch import make_selenium_driver as _make_selenium_driver
-from chrono24_fetch import soup_from_driver as _soup_from_driver
 
 COLUMNS = [
     "Stock",
@@ -30,6 +29,7 @@ COLUMNS = [
 BASE_URL = "https://www.chrono24.com"
 MAX_VENDOR_PAGES = 20
 MAX_LISTINGS = 300
+ProgressCallback = Callable[[str], None]
 
 
 def _strip_tracking(url: str) -> str:
@@ -111,27 +111,39 @@ def _extract_box_papers(specs: dict[str, str]) -> tuple[str, str]:
     return box, papers
 
 
-def collect_listing_urls(search_url: str, max_pages: int = MAX_VENDOR_PAGES) -> list[str]:
+def collect_listing_urls(
+    search_url: str,
+    max_pages: int = MAX_VENDOR_PAGES,
+    progress_callback: ProgressCallback | None = None,
+) -> list[str]:
     max_listings = int(os.environ.get("CHRONO24_MAX_LISTINGS", str(MAX_LISTINGS)))
     urls: list[str] = []
     seen: set[str] = set()
     page_url: str | None = search_url
 
-    for _ in range(max_pages):
+    for page_number in range(1, max_pages + 1):
         if page_url is None:
             break
 
+        if progress_callback is not None:
+            progress_callback(f"   Chrono24: leyendo pagina {page_number}: {page_url}")
         soup = _get_soup(page_url)
         for listing_url in _extract_listing_urls(soup, page_url):
             if listing_url not in seen:
                 seen.add(listing_url)
                 urls.append(listing_url)
+                if progress_callback is not None and len(urls) % 10 == 0:
+                    progress_callback(f"   Chrono24: {len(urls)} listings encontrados...")
                 if len(urls) >= max_listings:
+                    if progress_callback is not None:
+                        progress_callback(f"   Chrono24: limite de {max_listings} listings alcanzado")
                     return urls
 
         next_url = _find_next_page_url(soup, page_url)
         page_url = next_url if next_url not in seen else None
 
+    if progress_callback is not None:
+        progress_callback(f"   Chrono24: {len(urls)} listings encontrados")
     return urls
 
 
@@ -176,40 +188,57 @@ def _is_empty_detail(info: dict[str, str]) -> bool:
     return info.get("Listing code", "Missing") == "Missing" and info.get("Brand", "Missing") == "Missing"
 
 
-def _expand_input_url(url: str) -> list[str]:
+def _expand_input_url(url: str, progress_callback: ProgressCallback | None = None) -> list[str]:
     clean_url = _strip_tracking(url)
     if _is_listing_url(clean_url):
         return [clean_url]
-    return collect_listing_urls(url)
+    return collect_listing_urls(url, progress_callback=progress_callback)
 
 
-def scrape_multiple(urls: list[str]) -> pd.DataFrame:
+def scrape_multiple(
+    urls: list[str],
+    existing_ids: set[str] | None = None,
+    progress_callback: ProgressCallback | None = None,
+) -> pd.DataFrame:
     rows: list[dict[str, str]] = []
     seen: set[str] = set()
-    driver = None
+    existing = set() if existing_ids is None else existing_ids
 
-    try:
-        for url in urls:
-            for listing_url in _expand_input_url(url):
-                if listing_url in seen:
-                    continue
-                seen.add(listing_url)
-                try:
-                    soup = _get_soup_with_requests(listing_url)
-                    if soup is None:
-                        if driver is None:
-                            driver = _make_selenium_driver()
-                        soup = _soup_from_driver(driver, listing_url)
-                    info = _parse_chrono24_detail(soup, listing_url)
-                    if _is_empty_detail(info):
-                        info = scrape_chrono24(listing_url)
-                    rows.append(_row_from_info(info))
-                except (requests.RequestException, RuntimeError, OSError, ImportError) as exc:
-                    print(f"ERROR scraping {listing_url}: {exc}")
-                    rows.append(_row_from_info({"url": listing_url}))
-    finally:
-        if driver is not None:
-            driver.quit()
+    for url in urls:
+        listing_urls = _expand_input_url(url, progress_callback=progress_callback)
+        total = len(listing_urls)
+        if progress_callback is not None:
+            progress_callback(f"   Chrono24: procesando {total} listings")
+        skipped = 0
+        for index, listing_url in enumerate(listing_urls, 1):
+            if listing_url in seen:
+                continue
+            seen.add(listing_url)
+            if listing_url in existing or _strip_tracking(listing_url) in existing:
+                skipped += 1
+                if progress_callback is not None and skipped % 10 == 0:
+                    progress_callback(f"   Chrono24: {skipped} ya existentes omitidos...")
+                continue
+            try:
+                if progress_callback is not None:
+                    progress_callback(f"   Chrono24: scrapeando item {index}/{total}: {listing_url}")
+                soup = _get_soup_with_requests(listing_url)
+                if soup is None:
+                    if progress_callback is not None:
+                        progress_callback("   Chrono24: abriendo Chrome/Selenium para detalles")
+                    soup = _get_soup_with_browser(listing_url)
+                info = _parse_chrono24_detail(soup, listing_url)
+                if _is_empty_detail(info):
+                    info = scrape_chrono24(listing_url)
+                rows.append(_row_from_info(info))
+            except (requests.RequestException, RuntimeError, OSError, ImportError) as exc:
+                error_message = f"ERROR scraping {listing_url}: {exc}"
+                print(error_message)
+                if progress_callback is not None:
+                    progress_callback(f"   Chrono24: {error_message}")
+                rows.append(_row_from_info({"url": listing_url}))
+        if progress_callback is not None and skipped:
+            progress_callback(f"   Chrono24: {skipped} listings ya estaban en el CSV")
 
     return pd.DataFrame(rows, columns=COLUMNS)
 

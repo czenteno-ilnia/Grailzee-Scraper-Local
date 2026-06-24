@@ -3,6 +3,7 @@ from __future__ import annotations
 from bs4 import BeautifulSoup
 import pytest
 
+import chrono24_fetch
 import scraper_chrono24
 
 
@@ -36,6 +37,14 @@ DETAIL_HTML = """
 """
 
 
+class FakeDriver:
+    def __init__(self, calls: list[str]) -> None:
+        self.calls = calls
+
+    def quit(self) -> None:
+        self.calls.append("quit")
+
+
 @pytest.mark.integration
 def test_collect_listing_urls_when_vendor_search_has_multiple_pages(monkeypatch: pytest.MonkeyPatch) -> None:
     pages = {
@@ -61,7 +70,7 @@ def test_collect_listing_urls_when_vendor_search_has_multiple_pages(monkeypatch:
 
 @pytest.mark.integration
 def test_scrape_multiple_when_input_is_vendor_search_url(monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_collect_listing_urls(url: str) -> list[str]:
+    def fake_collect_listing_urls(url: str, progress_callback=None) -> list[str]:
         assert "customerId=23766" in url
         return ["https://www.chrono24.com/rolex/datejust-36--id111111.htm"]
 
@@ -72,9 +81,11 @@ def test_scrape_multiple_when_input_is_vendor_search_url(monkeypatch: pytest.Mon
     monkeypatch.setattr(scraper_chrono24, "collect_listing_urls", fake_collect_listing_urls)
     monkeypatch.setattr(scraper_chrono24, "_get_soup_with_requests", fake_get_soup)
 
-    df = scraper_chrono24.scrape_multiple([
-        "https://www.chrono24.com/search/index.htm?customerId=23766&dosearch=true"
-    ])
+    logs: list[str] = []
+    df = scraper_chrono24.scrape_multiple(
+        ["https://www.chrono24.com/search/index.htm?customerId=23766&dosearch=true"],
+        progress_callback=logs.append,
+    )
 
     assert df.to_dict(orient="records") == [{
         "Stock": "ABC123",
@@ -87,3 +98,81 @@ def test_scrape_multiple_when_input_is_vendor_search_url(monkeypatch: pytest.Mon
         "Papers": "Yes",
         "Original Price": "$8,750",
     }]
+    assert logs == ["   Chrono24: procesando 1 listings", "   Chrono24: scrapeando item 1/1: https://www.chrono24.com/rolex/datejust-36--id111111.htm"]
+
+
+@pytest.mark.integration
+def test_scrape_multiple_when_listing_already_exists_skips_detail_fetch(monkeypatch: pytest.MonkeyPatch) -> None:
+    existing_url = "https://www.chrono24.com/rolex/datejust-36--id111111.htm"
+
+    def fake_collect_listing_urls(url: str, progress_callback=None) -> list[str]:
+        assert "customerId=23766" in url
+        return [existing_url]
+
+    def fail_get_soup(url: str) -> BeautifulSoup:
+        raise AssertionError(f"Detail page should not be fetched for existing listing: {url}")
+
+    monkeypatch.setattr(scraper_chrono24, "collect_listing_urls", fake_collect_listing_urls)
+    monkeypatch.setattr(scraper_chrono24, "_get_soup_with_requests", fail_get_soup)
+
+    df = scraper_chrono24.scrape_multiple(
+        ["https://www.chrono24.com/search/index.htm?customerId=23766&dosearch=true"],
+        existing_ids={existing_url},
+    )
+
+    assert df.empty
+    assert list(df.columns) == scraper_chrono24.COLUMNS
+
+
+@pytest.mark.integration
+def test_scrape_multiple_when_detail_requests_blocked_uses_browser_helper(monkeypatch: pytest.MonkeyPatch) -> None:
+    listing_url = "https://www.chrono24.com/rolex/datejust-36--id111111.htm"
+    calls: list[str] = []
+
+    def fake_collect_listing_urls(url: str, progress_callback=None) -> list[str]:
+        return [listing_url]
+
+    def fake_get_soup_with_requests(url: str) -> BeautifulSoup | None:
+        calls.append(f"requests:{url}")
+        return None
+
+    def fake_get_soup_with_browser(url: str) -> BeautifulSoup:
+        calls.append(f"browser:{url}")
+        return BeautifulSoup(DETAIL_HTML, "html.parser")
+
+    monkeypatch.setattr(scraper_chrono24, "collect_listing_urls", fake_collect_listing_urls)
+    monkeypatch.setattr(scraper_chrono24, "_get_soup_with_requests", fake_get_soup_with_requests)
+    monkeypatch.setattr(scraper_chrono24, "_get_soup_with_browser", fake_get_soup_with_browser)
+
+    df = scraper_chrono24.scrape_multiple([
+        "https://www.chrono24.com/search/index.htm?customerId=23766&dosearch=true"
+    ])
+
+    assert len(df) == 1
+    assert calls == [f"requests:{listing_url}", f"browser:{listing_url}"]
+
+
+@pytest.mark.integration
+def test_get_soup_with_browser_uses_regular_selenium_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls: list[str] = []
+
+    def fail_undetected(url: str) -> BeautifulSoup:
+        raise AssertionError(f"undetected Chrome should not run by default: {url}")
+
+    def fake_make_driver() -> FakeDriver:
+        calls.append("make_driver")
+        return FakeDriver(calls)
+
+    def fake_soup_from_driver(driver: FakeDriver, url: str) -> BeautifulSoup:
+        calls.append(f"soup:{url}")
+        return BeautifulSoup("<html><body>ok</body></html>", "html.parser")
+
+    monkeypatch.delenv("CHRONO24_USE_UNDETECTED", raising=False)
+    monkeypatch.setattr(chrono24_fetch, "_get_soup_with_undetected_chrome", fail_undetected)
+    monkeypatch.setattr(chrono24_fetch, "make_selenium_driver", fake_make_driver)
+    monkeypatch.setattr(chrono24_fetch, "soup_from_driver", fake_soup_from_driver)
+
+    soup = chrono24_fetch.get_soup_with_browser("https://www.chrono24.com/example")
+
+    assert soup.get_text(" ", strip=True) == "ok"
+    assert calls == ["make_driver", "soup:https://www.chrono24.com/example", "quit"]

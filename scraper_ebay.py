@@ -1,5 +1,8 @@
 import re
 import time
+from datetime import datetime
+from pathlib import Path
+from typing import Callable
 import requests
 import urllib.parse as uparse
 from bs4 import BeautifulSoup
@@ -28,6 +31,7 @@ REQUEST_DELAY = 1.0
 OXYLABS_USERNAME = ""
 OXYLABS_PASSWORD = ""
 OXYLABS_API_URL = "https://realtime.oxylabs.io/v1/queries"
+OXYLABS_LOG_PATH = "logs/oxylabs_errors.txt"
 
 def set_credentials(user, pwd):
     global OXYLABS_USERNAME, OXYLABS_PASSWORD
@@ -36,6 +40,40 @@ def set_credentials(user, pwd):
 
 def empty_result():
     return pd.DataFrame(columns=COLUMNS)
+
+def _oxylabs_failure_reason(status_code: int) -> str:
+    if status_code in (401, 403):
+        return "invalid_credentials"
+    if status_code == 402:
+        return "account_limit_or_billing"
+    if status_code == 429:
+        return "rate_limited"
+    return "provider_error"
+
+def _oxylabs_user_message(reason: str) -> str:
+    messages = {
+        "missing_credentials": "Oxylabs no configurado. Agrega usuario y contrasena.",
+        "invalid_credentials": "Oxylabs rechazo las credenciales. Revisa usuario/contrasena o solicita nuevas credenciales.",
+        "account_limit_or_billing": "Oxylabs no tiene saldo o alcanzo el limite. Solicita nuevas credenciales o revisa el panel de Oxylabs.",
+        "rate_limited": "Oxylabs alcanzo un limite temporal. Espera unos minutos o revisa el panel de Oxylabs.",
+        "provider_error": "Oxylabs no pudo obtener datos. Revisa credenciales, saldo o el panel de Oxylabs.",
+        "empty_content": "Oxylabs respondio sin contenido util para esta URL.",
+        "network_error": "No se pudo conectar con Oxylabs. Revisa la conexion e intenta de nuevo.",
+    }
+    return messages.get(reason, messages["provider_error"])
+
+def _safe_log_url(url: str) -> str:
+    parsed = uparse.urlparse(url)
+    return uparse.urlunparse((parsed.scheme, parsed.netloc, parsed.path, "", "", ""))
+
+def _log_oxylabs_failure(url: str, reason: str, status_code: int | None = None, detail: str = "") -> None:
+    Path(OXYLABS_LOG_PATH).parent.mkdir(parents=True, exist_ok=True)
+    status_text = "" if status_code is None else f" status={status_code}"
+    detail_text = "" if not detail else f" detail_type={detail}"
+    message = _oxylabs_user_message(reason)
+    timestamp = datetime.now().isoformat(timespec="seconds")
+    with open(OXYLABS_LOG_PATH, "a", encoding="utf-8") as log_file:
+        log_file.write(f"{timestamp} reason={reason}{status_text} url={_safe_log_url(url)} message={message}{detail_text}\n")
 
 def normalize_label(label):
     normalized = re.sub(r"\s+", " ", label.strip().lower())
@@ -58,9 +96,11 @@ def is_search_or_store_url(url):
 # =========================
 # OXYLABS CLIENT
 # =========================
-def fetch_oxylabs_html(url, increment_usage_callback=None):
+def fetch_oxylabs_html(url, increment_usage_callback: Callable[[], None] | None = None):
     if not OXYLABS_USERNAME or not OXYLABS_PASSWORD:
-        print("⚠️ Oxylabs no configurado. Faltan credenciales.")
+        reason = "missing_credentials"
+        _log_oxylabs_failure(url, reason)
+        print(f"⚠️ {_oxylabs_user_message(reason)}")
         return None
 
     try:
@@ -71,7 +111,9 @@ def fetch_oxylabs_html(url, increment_usage_callback=None):
             timeout=60,
         )
         if response.status_code != 200:
-            print(f"⚠️ Oxylabs devolvió HTTP {response.status_code}")
+            reason = _oxylabs_failure_reason(response.status_code)
+            _log_oxylabs_failure(url, reason, response.status_code)
+            print(f"⚠️ {_oxylabs_user_message(reason)}")
             return None
             
         if increment_usage_callback:
@@ -79,10 +121,21 @@ def fetch_oxylabs_html(url, increment_usage_callback=None):
 
         results = response.json().get("results", [])
         if not results:
+            reason = "empty_content"
+            _log_oxylabs_failure(url, reason, response.status_code)
+            print(f"⚠️ {_oxylabs_user_message(reason)}")
             return None
-        return results[0].get("content")
-    except Exception as e:
-        print(f"❌ Error en Oxylabs: {e}")
+        content = results[0].get("content")
+        if not content:
+            reason = "empty_content"
+            _log_oxylabs_failure(url, reason, response.status_code)
+            print(f"⚠️ {_oxylabs_user_message(reason)}")
+            return None
+        return content
+    except requests.RequestException as e:
+        reason = "network_error"
+        _log_oxylabs_failure(url, reason, detail=type(e).__name__)
+        print(f"❌ {_oxylabs_user_message(reason)}")
         return None
 
 # =========================
@@ -196,6 +249,10 @@ def extract_oxylabs_item_links(url, max_pages=10, increment_usage_callback=None)
 def scrape_url(url, increment_usage_callback=None, existing_ids=None):
     try:
         if is_item_url(url):
+            item_id = extract_item_id(url)
+            if existing_ids and item_id in existing_ids:
+                print(f"   ⏭️ Ya en DB, saltando: {item_id}")
+                return empty_result()
             print(f"⚙️ Oxylabs: Scrapeando item: {url}")
             html = fetch_oxylabs_html(url, increment_usage_callback)
             return parse_item_html(html, url) if html else empty_result()

@@ -11,18 +11,28 @@ except ImportError:
 import MainApp
 
 
+class FakeCombo:
+    def __init__(self, values: list[str], selected: str = "") -> None:
+        self.values = values
+        self.selected = selected
+
+    def __getitem__(self, key: str):
+        if key == "values":
+            return self.values
+        raise KeyError(key)
+
+    def get(self) -> str:
+        return self.selected
+
+    def set(self, value: str) -> None:
+        self.selected = value
+
+
 @pytest.mark.integration
 def test_run_scraper_when_supported_brand_url_is_dispatched(
     monkeypatch: pytest.MonkeyPatch,
-    tmp_path,
 ) -> None:
-    app = MainApp.MainApp.__new__(MainApp.MainApp)
-    logs: list[str] = []
-    app.log_scraper = logs.append
-
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setitem(MainApp.settings, "report_dir", "reportes")
-    monkeypatch.setitem(MainApp.settings, "prefix", "test")
+    app = MainApp.GrailzeeApp.__new__(MainApp.GrailzeeApp)
     monkeypatch.setattr(
         MainApp.Scraper_Grandcaliber,
         "scrape_url",
@@ -39,21 +49,38 @@ def test_run_scraper_when_supported_brand_url_is_dispatched(
         }]),
     )
 
-    app.run_scraper(["https://www.grandcaliber.com/products/test-watch"])
+    df = app._dispatch("https://www.grandcaliber.com/products/test-watch")
 
-    assert (tmp_path / "reportes" / "test_scraper.csv").exists()
-    assert "✔ OK" in logs
+    assert df is not None
+    assert df.iloc[0]["Make"] == "Grand Caliber"
 
 
 @pytest.mark.integration
-def test_run_scraper_when_url_is_unsupported_does_not_write_report(tmp_path, monkeypatch: pytest.MonkeyPatch) -> None:
-    app = MainApp.MainApp.__new__(MainApp.MainApp)
+def test_run_scraper_when_url_is_unsupported_does_not_write_report(monkeypatch: pytest.MonkeyPatch) -> None:
+    app = MainApp.GrailzeeApp.__new__(MainApp.GrailzeeApp)
     logs: list[str] = []
-    app.log_scraper = logs.append
+    app.log = logs.append
 
-    monkeypatch.chdir(tmp_path)
+    df = app._dispatch("https://unsupported.example/watch")
 
-    app.run_scraper(["https://unsupported.example/watch"])
+    assert df is None
+    assert logs == ["   ⚠️ Sitio no reconocido"]
 
-    assert not (tmp_path / "reportes").exists()
-    assert "⚠️ Sitio no reconocido\n" in logs
+
+@pytest.mark.integration
+def test_auto_detect_csv_when_chrono24_has_customer_id_ignores_selected_csv(monkeypatch: pytest.MonkeyPatch) -> None:
+    app = MainApp.GrailzeeApp.__new__(MainApp.GrailzeeApp)
+    logs: list[str] = []
+    app.log = logs.append
+    app.combo_csv = FakeCombo(["fusionjewelersny.csv"], selected="fusionjewelersny.csv")
+    app._on_csv_selected = lambda: None
+
+    monkeypatch.setitem(MainApp.settings, "report_dir", "reportes")
+
+    csv_path = app._auto_detect_csv([
+        "https://www.chrono24.com/search/index.htm?customerId=24770&dosearch=true"
+    ])
+
+    assert csv_path == "reportes/chrono24_24770.csv"
+    assert app.combo_csv.get() == "fusionjewelersny.csv"
+    assert logs == ["📂 Nuevo CSV Chrono24: chrono24_24770.csv"]

@@ -25,6 +25,15 @@ EXPECTED_COLUMNS = [
 ]
 
 
+class FakeOxylabsResponse:
+    def __init__(self, status_code: int, results: list[dict[str, str]] | None = None) -> None:
+        self.status_code = status_code
+        self._results = [] if results is None else results
+
+    def json(self) -> dict[str, list[dict[str, str]]]:
+        return {"results": self._results}
+
+
 def assert_exact_columns(df: pd.DataFrame) -> None:
     assert list(df.columns) == EXPECTED_COLUMNS
 
@@ -32,6 +41,68 @@ def assert_exact_columns(df: pd.DataFrame) -> None:
 def assert_empty_exact_columns(df: pd.DataFrame) -> None:
     assert_exact_columns(df)
     assert df.empty
+
+
+@pytest.mark.unit
+def test_fetch_oxylabs_html_when_credentials_missing_logs_local_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    log_path = tmp_path / "oxylabs_errors.txt"
+    monkeypatch.setattr(scraper_ebay, "OXYLABS_LOG_PATH", str(log_path))
+    scraper_ebay.set_credentials("", "")
+
+    html = scraper_ebay.fetch_oxylabs_html("https://www.ebay.com/itm/123?token=secret")
+
+    assert html is None
+    log_text = log_path.read_text(encoding="utf-8")
+    assert "missing_credentials" in log_text
+    assert "https://www.ebay.com/itm/123" in log_text
+    assert "token=secret" not in log_text
+    assert "varias personas" not in log_text.lower()
+    assert "same account" not in log_text.lower()
+
+
+@pytest.mark.unit
+def test_scrape_url_when_direct_item_already_exists_skips_oxylabs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fail_fetch(url: str, increment_usage_callback=None) -> str:
+        raise AssertionError(f"Oxylabs should not run for an existing item: {url}")
+
+    monkeypatch.setattr(scraper_ebay, "fetch_oxylabs_html", fail_fetch)
+
+    df = scraper_ebay.scrape_url(
+        "https://www.ebay.com/itm/123456?hash=abc",
+        existing_ids={"123456"},
+    )
+
+    assert_empty_exact_columns(df)
+
+
+@pytest.mark.unit
+def test_fetch_oxylabs_html_when_account_limit_status_logs_actionable_error(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path,
+) -> None:
+    log_path = tmp_path / "oxylabs_errors.txt"
+
+    def fake_post(url, auth, json, timeout):
+        return FakeOxylabsResponse(402)
+
+    monkeypatch.setattr(scraper_ebay, "OXYLABS_LOG_PATH", str(log_path))
+    monkeypatch.setattr(scraper_ebay.requests, "post", fake_post)
+    scraper_ebay.set_credentials("user", "pass")
+
+    html = scraper_ebay.fetch_oxylabs_html("https://www.ebay.com/itm/456")
+
+    assert html is None
+    log_text = log_path.read_text(encoding="utf-8")
+    assert "account_limit_or_billing" in log_text
+    assert "status=402" in log_text
+    assert "Solicita nuevas credenciales" in log_text
+    assert "varias personas" not in log_text.lower()
+    assert "same account" not in log_text.lower()
 
 
 # =========================

@@ -46,6 +46,13 @@ def extract_vendor_name(url):
     if m: return m.group(1).strip()
     return None
 
+def extract_chrono24_customer_id(url):
+    m = re.search(r'[?&]customerId=([^&]+)', url, re.IGNORECASE)
+    if not m:
+        return None
+    customer_id = re.sub(r"[^A-Za-z0-9_-]", "", m.group(1).strip())
+    return customer_id or None
+
 class GrailzeeApp:
     def __init__(self, root):
         self.root = root
@@ -63,7 +70,7 @@ class GrailzeeApp:
 
         ttk.Label(top, text="⌚ Grailzee Scraper", font=("Segoe UI", 18, "bold")).pack(side="left")
         
-        self.lbl_usage = ttk.Label(top, text="Oxylabs Req: 0", font=("Segoe UI", 10))
+        self.lbl_usage = ttk.Label(top, text="Oxylabs local: 0 req", font=("Segoe UI", 10))
         self.lbl_usage.pack(side="right", padx=8)
 
         ttk.Separator(self.root, orient="horizontal").pack(fill="x", padx=16, pady=4)
@@ -166,7 +173,7 @@ class GrailzeeApp:
         user = self.entry_oxy_user.get().strip()
         usage_dict = settings.get("oxy_usage", {})
         count = usage_dict.get(user, 0)
-        self.lbl_usage.config(text=f"Oxylabs Req: {count} (~${(count / 1000) * 1.5:.2f} USD)")
+        self.lbl_usage.config(text=f"Oxylabs local: {count} req")
 
     def _increment_usage(self):
         user = self.entry_oxy_user.get().strip()
@@ -222,7 +229,9 @@ class GrailzeeApp:
             ids = set(str(s) for s in df["Stock"].dropna())
             if "URL" in df.columns:
                 for url in df["URL"].dropna():
-                    item_id = scraper_ebay.extract_item_id(str(url))
+                    url_text = str(url).split("?")[0]
+                    ids.add(url_text)
+                    item_id = scraper_ebay.extract_item_id(url_text)
                     if item_id: ids.add(item_id)
             return ids
         except Exception:
@@ -231,6 +240,18 @@ class GrailzeeApp:
     def _auto_detect_csv(self, urls):
         report_dir = settings.get("report_dir", "reportes")
         for url in urls:
+            if "chrono24" in url.lower():
+                customer_id = extract_chrono24_customer_id(url)
+                target = f"chrono24_{customer_id}.csv" if customer_id else "chrono24.csv"
+                csvs = self.combo_csv["values"] or []
+                if target in csvs:
+                    self.combo_csv.set(target)
+                    self._on_csv_selected()
+                    self.log(f"📂 CSV Chrono24 detectado: {target}")
+                else:
+                    self.log(f"📂 Nuevo CSV Chrono24: {target}")
+                return os.path.join(report_dir, target)
+
             vendor = extract_vendor_name(url)
             if vendor:
                 csvs = self.combo_csv["values"] or []
@@ -263,7 +284,7 @@ class GrailzeeApp:
 
     def _run_scraper(self, urls):
         self._scraping = True
-        self.log("🔵 Iniciando scraping (Oxylabs)…")
+        self.log("🔵 Iniciando scraping…")
         scraper_ebay.set_credentials(self.entry_oxy_user.get().strip(), self.entry_oxy_pass.get().strip())
 
         csv_path = self._auto_detect_csv(urls)
@@ -324,7 +345,7 @@ class GrailzeeApp:
     def _dispatch(self, url, existing_ids=None):
         low = url.lower()
         if "ebay" in low: return scraper_ebay.scrape_url(url, increment_usage_callback=self._increment_usage, existing_ids=existing_ids)
-        if "chrono24" in low: return scraper_chrono24.scrape_multiple([url])
+        if "chrono24" in low: return scraper_chrono24.scrape_multiple([url], existing_ids=existing_ids, progress_callback=self.log)
         if "swisstimepiececo" in low or "swiss timepiece" in low: return scraper_swisstimepiececo.scrape_url(url)
         if "wywatl" in low: return Scraper_Wywatl.scrape_url(url)
         if "thewatchoutlet" in low: return Scraper_Thewatchoutlet.scrape_url(url)

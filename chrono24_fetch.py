@@ -39,7 +39,7 @@ def get_soup_with_browser(url: str) -> BeautifulSoup:
     global _UNDETECTED_CHROME_DISABLED
     from selenium.common.exceptions import WebDriverException
 
-    if not _UNDETECTED_CHROME_DISABLED:
+    if os.environ.get("CHRONO24_USE_UNDETECTED") == "1" and not _UNDETECTED_CHROME_DISABLED:
         try:
             return _get_soup_with_undetected_chrome(url)
         except (ImportError, OSError, RuntimeError, WebDriverException) as exc:
