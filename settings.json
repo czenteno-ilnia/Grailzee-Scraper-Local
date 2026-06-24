@@ -1,0 +1,12 @@
+{
+    "report_dir": "reportes",
+    "prefix": "reporte",
+    "auto_folder": true,
+    "log_level": "normal",
+    "pause": 2.0,
+    "threads": 3,
+    "credentials_path": "credentials.json",
+    "theme": "light",
+    "pages_to_scrape": 1,
+    "pages_recurrent": 1
+}

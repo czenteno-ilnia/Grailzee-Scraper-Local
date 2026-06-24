@@ -1,0 +1,18 @@
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = [
+    "-m",
+    "not api and not browser and not network and not credentials",
+    "--strict-markers",
+    "--strict-config",
+]
+timeout = 60
+markers = [
+    "unit: fast tests for pure parsing and helper behavior",
+    "integration: tests that cross module boundaries with mocked external services",
+    "ui: Tkinter smoke tests; skipped automatically on headless Linux unless RUN_UI_TESTS=1",
+    "browser: Selenium/browser smoke tests; skipped unless RUN_BROWSER_TESTS=1",
+    "api: legacy or mocked API-backed tests; excluded from default pure scraping runs",
+    "network: tests that may use real network access; excluded from default runs",
+    "credentials: tests that require real credential files; excluded from default runs",
+]

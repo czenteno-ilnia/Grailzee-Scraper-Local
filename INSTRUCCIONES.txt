@@ -1,0 +1,116 @@
+INSTRUCCIONES PARA USAR EL SCRAPER
+==================================
+
+Carpeta principal del programa:
+
+    App-20260622T164520Z-3-001/App/App
+
+Archivo principal de Windows:
+
+    Run_App.bat
+
+Ejecuta este archivo con doble clic desde Windows para abrir la aplicacion completa.
+
+
+SCRAPEAR EL VENDEDOR DE CHRONO24
+================================
+
+URL usada para la prueba:
+
+    https://www.chrono24.com/search/index.htm?customerId=23766&dosearch=true
+
+Para generar el CSV directamente desde terminal, entra a la carpeta principal y ejecuta:
+
+En Windows PowerShell:
+
+    .venv\Scripts\Activate.ps1
+    python scraper_chrono24.py "https://www.chrono24.com/search/index.htm?customerId=23766&dosearch=true"
+
+En Windows CMD:
+
+    .venv\Scripts\activate.bat
+    python scraper_chrono24.py "https://www.chrono24.com/search/index.htm?customerId=23766&dosearch=true"
+
+En macOS o Linux:
+
+    source .venv/bin/activate
+    python scraper_chrono24.py "https://www.chrono24.com/search/index.htm?customerId=23766&dosearch=true"
+
+
+SALIDA ESPERADA
+===============
+
+El archivo CSV se genera aqui:
+
+    reportes/reporte_scraper.csv
+
+Ruta completa en esta maquina:
+
+    /home/noone/Documentos/Grailzee/App-20260622T164520Z-3-001/App/App/reportes/reporte_scraper.csv
+
+La prueba realizada genero 43 articulos del vendedor de Chrono24.
+
+Columnas del CSV:
+
+    Stock
+    URL
+    Make
+    Model
+    Reference Number
+    Year
+    Box
+    Papers
+    Original Price
+
+
+INSTALAR DEPENDENCIAS SI NO EXISTE .venv
+========================================
+
+Si la carpeta .venv no existe, crear el entorno primero.
+
+Windows PowerShell:
+
+    py -m venv .venv
+    .venv\Scripts\Activate.ps1
+    python -m pip install --upgrade pip
+    python -m pip install -r requirements-test.txt
+
+Windows CMD:
+
+    py -m venv .venv
+    .venv\Scripts\activate.bat
+    python -m pip install --upgrade pip
+    python -m pip install -r requirements-test.txt
+
+macOS o Linux:
+
+    python3 -m venv .venv
+    source .venv/bin/activate
+    python -m pip install --upgrade pip
+    python -m pip install -r requirements-test.txt
+
+
+NOTAS IMPORTANTES
+=================
+
+1. Este scraper de Chrono24 no usa credenciales ni APIs.
+2. No se necesita Google Sheets para esta prueba.
+3. No se necesita token de eBay para esta prueba.
+4. Chrono24 puede bloquear requests simples; por eso el scraper usa navegador Selenium cuando hace falta.
+5. En Windows y macOS debe estar instalado Google Chrome.
+6. Si ChromeDriver falla por version, actualizar Google Chrome normalmente soluciona el problema.
+7. El CSV se sobrescribe cada vez que se ejecuta scraper_chrono24.py.
+
+
+COMPROBAR QUE TODO FUNCIONA
+===========================
+
+Desde la carpeta principal, con el entorno activado:
+
+    python -m pytest
+
+Resultado esperado actual:
+
+    12 passed, 2 skipped, 4 deselected
+
+Los tests normales son locales y no usan APIs ni credenciales.
