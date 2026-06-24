@@ -264,7 +264,7 @@ class GrailzeeApp:
     def _run_scraper(self, urls):
         self._scraping = True
         self.log("🔵 Iniciando scraping (Oxylabs)…")
-        scraper_ebay.set_credentials(self.entry_oxy_user.get(), self.entry_oxy_pass.get())
+        scraper_ebay.set_credentials(self.entry_oxy_user.get().strip(), self.entry_oxy_pass.get().strip())
 
         csv_path = self._auto_detect_csv(urls)
         csv_ids = self._get_csv_item_ids(csv_path)
