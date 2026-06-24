@@ -8,5 +8,8 @@
     "credentials_path": "credentials.json",
     "theme": "light",
     "pages_to_scrape": 1,
-    "pages_recurrent": 1
+    "pages_recurrent": 1,
+    "oxy_usage": {},
+    "oxy_user": "yearning_31gUm",
+    "oxy_pass": "G5oeQR2dmzvvJa+"
 }
