@@ -1,5 +1,7 @@
 import re
 import time
+import json
+import urllib.request
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -32,11 +34,32 @@ OXYLABS_USERNAME = ""
 OXYLABS_PASSWORD = ""
 OXYLABS_API_URL = "https://realtime.oxylabs.io/v1/queries"
 OXYLABS_LOG_PATH = "logs/oxylabs_errors.txt"
+OXYLABS_MAX_RETRIES = 5  # reintentos ante fallos transitorios (429/5xx/red/vacio)
+
+# Webhook opcional (Discord) para visibilidad remota de fallos
+WEBHOOK_URL = ""
 
 def set_credentials(user, pwd):
     global OXYLABS_USERNAME, OXYLABS_PASSWORD
     OXYLABS_USERNAME = user
     OXYLABS_PASSWORD = pwd
+
+def set_webhook(url):
+    global WEBHOOK_URL
+    WEBHOOK_URL = (url or "").strip()
+
+def post_webhook(msg):
+    """POST simple a un webhook tipo Discord. No-op si no hay URL. Nunca rompe el scraping."""
+    if not WEBHOOK_URL:
+        return
+    try:
+        data = json.dumps({"content": msg[:1900]}).encode("utf-8")
+        req = urllib.request.Request(
+            WEBHOOK_URL, data=data, headers={"Content-Type": "application/json"}
+        )
+        urllib.request.urlopen(req, timeout=10)
+    except Exception:
+        pass
 
 def empty_result():
     return pd.DataFrame(columns=COLUMNS)
@@ -88,6 +111,14 @@ def extract_item_id(url):
 def is_item_url(url):
     return extract_item_id(url) is not None
 
+def clean_item_url(url):
+    """Las paginas de item no necesitan query (itmmeta/epid/hash). Devuelve la URL canonica
+    /itm/{id} para que Oxylabs reciba un enlace limpio y no falle por params de tracking."""
+    item_id = extract_item_id(url)
+    if not item_id:
+        return url
+    return f"https://www.ebay.com/itm/{item_id}"
+
 def is_search_or_store_url(url):
     lower = url.lower()
     return ("ebay.com/sch/" in lower or "ebay.com/str/" in lower or 
@@ -101,42 +132,63 @@ def fetch_oxylabs_html(url, increment_usage_callback: Callable[[], None] | None 
         reason = "missing_credentials"
         _log_oxylabs_failure(url, reason)
         print(f"⚠️ {_oxylabs_user_message(reason)}")
+        post_webhook(f"⚠️ Oxylabs: {_oxylabs_user_message(reason)}")
         return None
 
-    try:
-        response = requests.post(
-            OXYLABS_API_URL,
-            auth=(OXYLABS_USERNAME, OXYLABS_PASSWORD),
-            json={"source": "universal", "url": url, "geo_location": "United States"},
-            timeout=60,
-        )
-        if response.status_code != 200:
-            reason = _oxylabs_failure_reason(response.status_code)
-            _log_oxylabs_failure(url, reason, response.status_code)
-            print(f"⚠️ {_oxylabs_user_message(reason)}")
-            return None
-            
-        if increment_usage_callback:
-            increment_usage_callback()
+    for attempt in range(1, OXYLABS_MAX_RETRIES + 1):
+        try:
+            response = requests.post(
+                OXYLABS_API_URL,
+                auth=(OXYLABS_USERNAME, OXYLABS_PASSWORD),
+                json={"source": "universal", "url": url, "geo_location": "United States"},
+                timeout=60,
+            )
 
-        results = response.json().get("results", [])
-        if not results:
-            reason = "empty_content"
-            _log_oxylabs_failure(url, reason, response.status_code)
-            print(f"⚠️ {_oxylabs_user_message(reason)}")
+            if response.status_code != 200:
+                reason = _oxylabs_failure_reason(response.status_code)
+                _log_oxylabs_failure(url, reason, response.status_code, detail=f"attempt={attempt}")
+                # Credenciales/billing = permanente, no tiene sentido reintentar
+                if reason in ("invalid_credentials", "account_limit_or_billing"):
+                    print(f"⚠️ {_oxylabs_user_message(reason)}")
+                    post_webhook(f"⛔ Oxylabs: {_oxylabs_user_message(reason)}")
+                    return None
+                # 429 / 5xx = transitorio → backoff y reintento
+                if attempt < OXYLABS_MAX_RETRIES:
+                    wait = 2 ** (attempt - 1)
+                    print(f"⏳ Oxylabs {response.status_code}, reintento {attempt}/{OXYLABS_MAX_RETRIES} en {wait}s…")
+                    time.sleep(wait)
+                    continue
+                print(f"⚠️ {_oxylabs_user_message(reason)}")
+                return None
+
+            if increment_usage_callback:
+                increment_usage_callback()
+
+            results = response.json().get("results", [])
+            content = results[0].get("content") if results else None
+            if not content:
+                reason = "empty_content"
+                _log_oxylabs_failure(url, reason, response.status_code, detail=f"attempt={attempt}")
+                if attempt < OXYLABS_MAX_RETRIES:
+                    wait = 2 ** (attempt - 1)
+                    print(f"⏳ Oxylabs sin contenido, reintento {attempt}/{OXYLABS_MAX_RETRIES} en {wait}s…")
+                    time.sleep(wait)
+                    continue
+                print(f"⚠️ {_oxylabs_user_message(reason)}")
+                return None
+            return content
+
+        except requests.RequestException as e:
+            reason = "network_error"
+            _log_oxylabs_failure(url, reason, detail=f"{type(e).__name__} attempt={attempt}")
+            if attempt < OXYLABS_MAX_RETRIES:
+                wait = 2 ** (attempt - 1)
+                print(f"⏳ Error de red, reintento {attempt}/{OXYLABS_MAX_RETRIES} en {wait}s…")
+                time.sleep(wait)
+                continue
+            print(f"❌ {_oxylabs_user_message(reason)}")
             return None
-        content = results[0].get("content")
-        if not content:
-            reason = "empty_content"
-            _log_oxylabs_failure(url, reason, response.status_code)
-            print(f"⚠️ {_oxylabs_user_message(reason)}")
-            return None
-        return content
-    except requests.RequestException as e:
-        reason = "network_error"
-        _log_oxylabs_failure(url, reason, detail=type(e).__name__)
-        print(f"❌ {_oxylabs_user_message(reason)}")
-        return None
+    return None
 
 # =========================
 # PARSEO HTML
@@ -253,9 +305,10 @@ def scrape_url(url, increment_usage_callback=None, existing_ids=None):
             if existing_ids and item_id in existing_ids:
                 print(f"   ⏭️ Ya en DB, saltando: {item_id}")
                 return empty_result()
-            print(f"⚙️ Oxylabs: Scrapeando item: {url}")
-            html = fetch_oxylabs_html(url, increment_usage_callback)
-            return parse_item_html(html, url) if html else empty_result()
+            clean_url = clean_item_url(url)
+            print(f"⚙️ Oxylabs: Scrapeando item: {clean_url}")
+            html = fetch_oxylabs_html(clean_url, increment_usage_callback)
+            return parse_item_html(html, clean_url) if html else empty_result()
 
         if is_search_or_store_url(url):
             item_links = extract_oxylabs_item_links(url, increment_usage_callback=increment_usage_callback)

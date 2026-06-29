@@ -5,6 +5,7 @@ import os
 import json
 import re
 import glob
+from datetime import datetime
 import pandas as pd
 import sv_ttk
 
@@ -73,6 +74,8 @@ class GrailzeeApp:
         self.lbl_usage = ttk.Label(top, text="Oxylabs local: 0 req", font=("Segoe UI", 10))
         self.lbl_usage.pack(side="right", padx=8)
 
+        ttk.Button(top, text="⬇ Actualizar app", command=self._update_app).pack(side="right", padx=8)
+
         ttk.Separator(self.root, orient="horizontal").pack(fill="x", padx=16, pady=4)
 
         body = ttk.Frame(self.root)
@@ -85,6 +88,13 @@ class GrailzeeApp:
         ttk.Label(left, text="URLs (una por línea)", font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(0, 4))
         self.txt_urls = scrolledtext.ScrolledText(left, width=55, height=8, font=("Consolas", 10))
         self.txt_urls.pack(fill="x", pady=(0, 8))
+
+        name_row = ttk.Frame(left)
+        name_row.pack(fill="x", pady=(0, 8))
+        ttk.Label(name_row, text="Nombre del reporte:").pack(side="left", padx=(0, 4))
+        self.entry_report_name = ttk.Entry(name_row, width=28)
+        self.entry_report_name.pack(side="left")
+        ttk.Label(name_row, text="(vacío = por fecha)", font=("Segoe UI", 8)).pack(side="left", padx=(4, 0))
 
         btn_row = ttk.Frame(left)
         btn_row.pack(fill="x", pady=(0, 12))
@@ -141,6 +151,13 @@ class GrailzeeApp:
         self.entry_oxy_pass = ttk.Entry(oxy_row2, width=25, show="*")
         self.entry_oxy_pass.pack(side="left")
         self.entry_oxy_pass.insert(0, settings.get("oxy_pass", ""))
+
+        hook_row = ttk.Frame(left)
+        hook_row.pack(fill="x", pady=(4, 0))
+        ttk.Label(hook_row, text="Webhook (opcional):").pack(side="left", padx=(0, 4))
+        self.entry_webhook = ttk.Entry(hook_row, width=25)
+        self.entry_webhook.pack(side="left")
+        self.entry_webhook.insert(0, settings.get("webhook_url", ""))
 
         ttk.Button(left, text="Guardar config", command=self._save_config).pack(anchor="w", pady=(8, 0))
 
@@ -237,38 +254,17 @@ class GrailzeeApp:
         except Exception:
             return set()
 
-    def _auto_detect_csv(self, urls):
+    def _batch_csv_path(self):
+        """Un CSV por batch. Usa el nombre del campo; si está vacío, uno por fecha/hora.
+        Reusar el mismo nombre acumula en ese archivo (dedup por Stock)."""
         report_dir = settings.get("report_dir", "reportes")
-        for url in urls:
-            if "chrono24" in url.lower():
-                customer_id = extract_chrono24_customer_id(url)
-                target = f"chrono24_{customer_id}.csv" if customer_id else "chrono24.csv"
-                csvs = self.combo_csv["values"] or []
-                if target in csvs:
-                    self.combo_csv.set(target)
-                    self._on_csv_selected()
-                    self.log(f"📂 CSV Chrono24 detectado: {target}")
-                else:
-                    self.log(f"📂 Nuevo CSV Chrono24: {target}")
-                return os.path.join(report_dir, target)
-
-            vendor = extract_vendor_name(url)
-            if vendor:
-                csvs = self.combo_csv["values"] or []
-                for csv_name in csvs:
-                    if vendor.lower() in csv_name.lower():
-                        self.combo_csv.set(csv_name)
-                        self._on_csv_selected()
-                        self.log(f"📂 CSV detectado: {csv_name}")
-                        return os.path.join(report_dir, csv_name)
-                target = f"{vendor}.csv"
-                self.log(f"📂 Nuevo CSV se creará: {target}")
-                return os.path.join(report_dir, target)
-        selected = self.combo_csv.get()
-        if selected:
-            return os.path.join(report_dir, selected)
-        prefix = settings.get("prefix", "reporte")
-        return os.path.join(report_dir, f"{prefix}_scraper.csv")
+        name = self.entry_report_name.get().strip()
+        if not name:
+            name = "batch_" + datetime.now().strftime("%Y%m%d_%H%M")
+        name = re.sub(r"[^A-Za-z0-9_-]+", "_", name).strip("_") or "batch"
+        if not name.lower().endswith(".csv"):
+            name += ".csv"
+        return os.path.join(report_dir, name)
 
     def start_scraper(self):
         urls = [u.strip() for u in self.txt_urls.get("1.0", tk.END).strip().split("\n") if u.strip()]
@@ -286,18 +282,18 @@ class GrailzeeApp:
         self._scraping = True
         self.log("🔵 Iniciando scraping…")
         scraper_ebay.set_credentials(self.entry_oxy_user.get().strip(), self.entry_oxy_pass.get().strip())
+        scraper_ebay.set_webhook(self.entry_webhook.get().strip())
 
-        csv_path = self._auto_detect_csv(urls)
+        csv_path = self._batch_csv_path()
+        self.log(f"📂 Reporte de este batch: {os.path.basename(csv_path)}")
         csv_ids = self._get_csv_item_ids(csv_path)
         if csv_ids: self.log(f"📋 {len(csv_ids)} items ya en CSV → se omitirán")
 
-        self._set_status(f"Scrapeando {len(urls)} URL(s)…")
-        self.progress["value"] = 0
-        self.progress["maximum"] = len(urls)
         resultados = []
 
-        for i, url in enumerate(urls, 1):
-            self.log(f"\n🔍 [{i}/{len(urls)}] {url}")
+        def procesar(url, idx, total, etapa=""):
+            """Scrapea una URL, acumula en resultados. Devuelve True si trajo/encontró datos."""
+            self.log(f"\n🔍 {etapa}[{idx}/{total}] {url}")
             try:
                 df = self._dispatch(url, existing_ids=csv_ids)
                 if df is not None and not df.empty:
@@ -311,12 +307,34 @@ class GrailzeeApp:
                         self.log(f"   ✔ {len(df)} fila(s) nuevas")
                     else:
                         self.log("   ℹ️ Todo ya está en el CSV")
-                else:
-                    self.log("   ⚠️ Sin datos")
+                    return True
+                self.log("   ⚠️ Sin datos")
+                return False
             except Exception as e:
                 self.log(f"   ❌ Error: {e}")
+                return False
+
+        self._set_status(f"Scrapeando {len(urls)} URL(s)…")
+        self.progress["value"] = 0
+        self.progress["maximum"] = len(urls)
+        fallidos = []
+        for i, url in enumerate(urls, 1):
+            if not procesar(url, i, len(urls)):
+                fallidos.append(url)
             self.progress["value"] = i
 
+        # Cola final: reintentar una vez los que no trajeron datos
+        if fallidos:
+            self.log(f"\n🔁 Reintentando {len(fallidos)} URL(s) sin datos…")
+            pendientes, fallidos = fallidos, []
+            self.progress["value"] = 0
+            self.progress["maximum"] = len(pendientes)
+            for i, url in enumerate(pendientes, 1):
+                if not procesar(url, i, len(pendientes), etapa="🔁 "):
+                    fallidos.append(url)
+                self.progress["value"] = i
+
+        nuevos = 0
         if resultados:
             df_new = pd.concat(resultados, ignore_index=True)
             df_new.dropna(how="all", inplace=True)
@@ -325,19 +343,33 @@ class GrailzeeApp:
                 df_existing = pd.read_csv(csv_path)
                 existing_stocks = set(str(s) for s in df_existing["Stock"].dropna())
                 df_new = df_new[~df_new["Stock"].astype(str).isin(existing_stocks)]
+                nuevos = len(df_new)
                 if not df_new.empty:
                     pd.concat([df_existing, df_new], ignore_index=True).to_csv(csv_path, index=False)
-                    self.log(f"\n✅ +{len(df_new)} nuevos → {os.path.basename(csv_path)}")
+                    self.log(f"\n✅ +{nuevos} nuevos → {os.path.basename(csv_path)}")
                 else:
                     self.log(f"\nℹ️ Sin items nuevos")
             else:
+                nuevos = len(df_new)
                 df_new.to_csv(csv_path, index=False)
-                self.log(f"\n✅ {len(df_new)} items → {os.path.basename(csv_path)}")
+                self.log(f"\n✅ {nuevos} items → {os.path.basename(csv_path)}")
             self._refresh_csvs()
             self.combo_csv.set(os.path.basename(csv_path))
             self._on_csv_selected()
         else:
             self.log("\n⚠️ No se obtuvieron resultados nuevos.")
+
+        if fallidos:
+            self.log(f"\n⚠️ {len(fallidos)} URL(s) sin datos tras reintentar:")
+            for u in fallidos:
+                self.log(f"   • {u}")
+
+        # Resumen al webhook (visibilidad remota); no-op si no hay webhook configurado
+        resumen = (f"📊 Batch '{os.path.basename(csv_path)}': {nuevos} nuevos, "
+                   f"{len(fallidos)} sin datos de {len(urls)} URL(s).")
+        if fallidos:
+            resumen += "\nSin datos:\n" + "\n".join(fallidos)
+        scraper_ebay.post_webhook(resumen)
 
         self._set_status("Listo.")
         self._scraping = False
@@ -366,9 +398,68 @@ class GrailzeeApp:
         settings["prefix"] = self.entry_prefix.get()
         settings["oxy_user"] = self.entry_oxy_user.get()
         settings["oxy_pass"] = self.entry_oxy_pass.get()
+        settings["webhook_url"] = self.entry_webhook.get().strip()
         save_settings(settings)
         self._refresh_csvs()
         self._update_usage_ui()
+
+    # === Actualización desde GitHub (zip) ===
+    GITHUB_ZIP_URL = "https://github.com/czenteno-ilnia/Grailzee-Scraper/archive/refs/heads/main.zip"
+
+    def _update_app(self):
+        if self._scraping:
+            return messagebox.showinfo("Info", "Espera a que termine el scraping para actualizar.")
+        ok = messagebox.askyesno(
+            "Actualizar app",
+            "¿Descargar la última versión desde GitHub?\n\n"
+            "Tu configuración, reportes y credenciales se conservan.\n"
+            "Al terminar, cierra y vuelve a abrir la app."
+        )
+        if not ok:
+            return
+        threading.Thread(target=self._do_update, daemon=True).start()
+
+    def _do_update(self):
+        import urllib.request, zipfile, tempfile
+        app_dir = os.path.dirname(os.path.abspath(__file__))
+        self.root.after(0, lambda: self.log("⬇ Descargando actualización…"))
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                zip_path = os.path.join(tmp, "update.zip")
+                urllib.request.urlretrieve(self.GITHUB_ZIP_URL, zip_path)
+                with zipfile.ZipFile(zip_path) as zf:
+                    zf.extractall(tmp)
+                roots = [os.path.join(tmp, d) for d in os.listdir(tmp)
+                         if os.path.isdir(os.path.join(tmp, d)) and d.lower().startswith("grailzee")]
+                if not roots:
+                    self.root.after(0, lambda: self.log("❌ Update: estructura de zip inesperada"))
+                    return
+                count = self._copy_update(roots[0], app_dir)
+            self.root.after(0, lambda: self.log(f"✅ Actualizado: {count} archivo(s). Reinicia la app."))
+            self.root.after(0, lambda: messagebox.showinfo(
+                "Actualizado", "Listo. Cierra y vuelve a abrir la app para usar la nueva versión."))
+        except Exception as e:
+            self.root.after(0, lambda e=e: self.log(f"❌ Error al actualizar: {e}"))
+
+    def _copy_update(self, src, dst):
+        """Copia solo código nuevo sobre la app. Respeta config, reportes, credenciales y entornos."""
+        import shutil
+        SKIP_DIRS = {".git", "reportes", "logs", "local", "__pycache__",
+                     ".venv_windows", ".venv_unix", ".venv_mac", "env"}
+        SKIP_FILES = {"settings.json", ".env"}
+        ALLOW_EXT = {".py", ".bat", ".sh", ".command", ".txt", ".md"}
+        count = 0
+        for root, dirs, files in os.walk(src):
+            dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
+            rel = os.path.relpath(root, src)
+            target_dir = dst if rel == "." else os.path.join(dst, rel)
+            for f in files:
+                if f in SKIP_FILES or os.path.splitext(f)[1].lower() not in ALLOW_EXT:
+                    continue
+                os.makedirs(target_dir, exist_ok=True)
+                shutil.copy2(os.path.join(root, f), os.path.join(target_dir, f))
+                count += 1
+        return count
 
 if __name__ == "__main__":
     root = tk.Tk()

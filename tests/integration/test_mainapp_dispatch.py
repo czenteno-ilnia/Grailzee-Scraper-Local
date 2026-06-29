@@ -67,20 +67,29 @@ def test_run_scraper_when_url_is_unsupported_does_not_write_report(monkeypatch: 
     assert logs == ["   ⚠️ Sitio no reconocido"]
 
 
-@pytest.mark.integration
-def test_auto_detect_csv_when_chrono24_has_customer_id_ignores_selected_csv(monkeypatch: pytest.MonkeyPatch) -> None:
-    app = MainApp.GrailzeeApp.__new__(MainApp.GrailzeeApp)
-    logs: list[str] = []
-    app.log = logs.append
-    app.combo_csv = FakeCombo(["fusionjewelersny.csv"], selected="fusionjewelersny.csv")
-    app._on_csv_selected = lambda: None
+class FakeEntry:
+    def __init__(self, value: str = "") -> None:
+        self.value = value
 
+    def get(self) -> str:
+        return self.value
+
+
+@pytest.mark.integration
+def test_batch_csv_path_uses_report_name_and_slugifies(monkeypatch: pytest.MonkeyPatch) -> None:
+    app = MainApp.GrailzeeApp.__new__(MainApp.GrailzeeApp)
+    app.entry_report_name = FakeEntry("Rolex Batch #3")
     monkeypatch.setitem(MainApp.settings, "report_dir", "reportes")
 
-    csv_path = app._auto_detect_csv([
-        "https://www.chrono24.com/search/index.htm?customerId=24770&dosearch=true"
-    ])
+    assert app._batch_csv_path() == "reportes/Rolex_Batch_3.csv"
 
-    assert csv_path == "reportes/chrono24_24770.csv"
-    assert app.combo_csv.get() == "fusionjewelersny.csv"
-    assert logs == ["📂 Nuevo CSV Chrono24: chrono24_24770.csv"]
+
+@pytest.mark.integration
+def test_batch_csv_path_defaults_to_timestamp_when_empty(monkeypatch: pytest.MonkeyPatch) -> None:
+    app = MainApp.GrailzeeApp.__new__(MainApp.GrailzeeApp)
+    app.entry_report_name = FakeEntry("")
+    monkeypatch.setitem(MainApp.settings, "report_dir", "reportes")
+
+    csv_path = app._batch_csv_path()
+    name = csv_path.split("/")[-1]
+    assert name.startswith("batch_") and name.endswith(".csv")
