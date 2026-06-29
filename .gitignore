@@ -10,6 +10,7 @@ env/
 .env
 .env.local
 .env.*.local
+settings.json
 
 # IDE
 .vscode/
@@ -47,7 +48,4 @@ logs/
 .coverage
 htmlcov/
 
-# AI & Agents
-.omo/
-.agents/
-.gemini/
+local/
