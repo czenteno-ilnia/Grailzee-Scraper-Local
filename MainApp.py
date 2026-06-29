@@ -23,7 +23,7 @@ CONFIG_FILE = "settings.json"
 
 def load_settings():
     if not os.path.exists(CONFIG_FILE):
-        default = {"report_dir": "reportes", "prefix": "reporte", "oxy_usage": {}}
+        default = {"report_dir": "reportes", "oxy_usage": {}}
         save_settings(default)
         return default
     with open(CONFIG_FILE, "r") as f:
@@ -62,7 +62,7 @@ class GrailzeeApp:
         self.root.minsize(900, 650)
         self._scraping = False
         self._build_ui()
-        self._refresh_csvs()
+        self._update_latest_info()
         self._update_usage_ui()
 
     def _build_ui(self):
@@ -89,12 +89,12 @@ class GrailzeeApp:
         self.txt_urls = scrolledtext.ScrolledText(left, width=55, height=8, font=("Consolas", 10))
         self.txt_urls.pack(fill="x", pady=(0, 8))
 
-        name_row = ttk.Frame(left)
-        name_row.pack(fill="x", pady=(0, 8))
-        ttk.Label(name_row, text="Nombre del reporte:").pack(side="left", padx=(0, 4))
-        self.entry_report_name = ttk.Entry(name_row, width=28)
+        save_row = ttk.Frame(left)
+        save_row.pack(fill="x", pady=(0, 6))
+        ttk.Label(save_row, text="Guardar en:", width=11).pack(side="left", padx=(0, 4))
+        self.entry_report_name = ttk.Entry(save_row, width=28)
         self.entry_report_name.pack(side="left")
-        ttk.Label(name_row, text="(vacío = por fecha)", font=("Segoe UI", 8)).pack(side="left", padx=(4, 0))
+        ttk.Label(save_row, text="(vacío = fecha)", font=("Segoe UI", 8)).pack(side="left", padx=(4, 0))
 
         btn_row = ttk.Frame(left)
         btn_row.pack(fill="x", pady=(0, 12))
@@ -104,14 +104,8 @@ class GrailzeeApp:
 
         ttk.Separator(left, orient="horizontal").pack(fill="x", pady=8)
 
-        ttk.Label(left, text="Reportes CSV", font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(0, 4))
-        csv_row = ttk.Frame(left)
-        csv_row.pack(fill="x", pady=(0, 4))
-        self.combo_csv = ttk.Combobox(csv_row, width=32)
-        self.combo_csv.pack(side="left", padx=(0, 4))
-        self.combo_csv.bind("<<ComboboxSelected>>", lambda e: self._on_csv_selected())
-        ttk.Button(csv_row, text="🔄", width=3, command=self._refresh_csvs).pack(side="left", padx=(0, 4))
-        ttk.Button(csv_row, text="📂 Abrir", width=8, command=self._open_csv_folder).pack(side="left")
+        ttk.Label(left, text="Reportes", font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(0, 4))
+        ttk.Button(left, text="📄 Abrir último reporte", command=self._open_csv).pack(anchor="w", pady=(0, 4))
 
         self.lbl_csv_info = ttk.Label(left, text="", font=("Segoe UI", 9))
         self.lbl_csv_info.pack(anchor="w", pady=(2, 4))
@@ -126,13 +120,6 @@ class GrailzeeApp:
         self.entry_report_dir.pack(side="left", padx=(0, 4))
         self.entry_report_dir.insert(0, settings.get("report_dir", "reportes"))
         ttk.Button(cfg_row, text="📁", command=self._choose_folder, width=3).pack(side="left")
-
-        pfx_row = ttk.Frame(left)
-        pfx_row.pack(fill="x", pady=(0, 4))
-        ttk.Label(pfx_row, text="Prefijo archivo:").pack(side="left", padx=(0, 4))
-        self.entry_prefix = ttk.Entry(pfx_row, width=20)
-        self.entry_prefix.pack(side="left")
-        self.entry_prefix.insert(0, settings.get("prefix", "reporte"))
 
         ttk.Separator(left, orient="horizontal").pack(fill="x", pady=8)
 
@@ -200,43 +187,38 @@ class GrailzeeApp:
             settings["oxy_usage"] = usage_dict
             self.root.after(0, self._update_usage_ui)
 
-    def _refresh_csvs(self):
+    def _latest_csv(self, report_dir):
+        csvs = glob.glob(os.path.join(report_dir, "*.csv"))
+        return max(csvs, key=os.path.getmtime) if csvs else None
+
+    def _update_latest_info(self):
         report_dir = settings.get("report_dir", "reportes")
         os.makedirs(report_dir, exist_ok=True)
-        csvs = sorted(glob.glob(os.path.join(report_dir, "*.csv")))
-        names = [os.path.basename(c) for c in csvs]
-        current = self.combo_csv.get()
-        self.combo_csv["values"] = names
-        if current in names:
-            self.combo_csv.set(current)
-        elif names:
-            self.combo_csv.current(0)
-        self._on_csv_selected()
-
-    def _on_csv_selected(self):
-        name = self.combo_csv.get()
-        if not name:
+        latest = self._latest_csv(report_dir)
+        if not latest:
             self.lbl_csv_info.config(text="  Sin reportes aún")
             return
-        report_dir = settings.get("report_dir", "reportes")
-        path = os.path.join(report_dir, name)
+        name = os.path.basename(latest)
         try:
-            df = pd.read_csv(path)
+            df = pd.read_csv(latest)
             self.lbl_csv_info.config(text=f"  📋 {len(df)} items en {name}")
         except Exception:
             self.lbl_csv_info.config(text=f"  ⚠️ Error leyendo {name}")
 
-    def _open_csv_folder(self):
+    def _open_csv(self):
         report_dir = os.path.abspath(settings.get("report_dir", "reportes"))
-        os.makedirs(report_dir, exist_ok=True)
+        # Abre el CSV más reciente (por fecha de modificación); si no hay, abre la carpeta
+        target = self._latest_csv(report_dir) or report_dir
+        if not os.path.exists(target):
+            return self.log("⚠️ No hay reportes aún")
         import subprocess
         try:
             if os.name == 'nt':
-                os.startfile(report_dir)
+                os.startfile(target)
             else:
-                subprocess.Popen(['xdg-open', report_dir])
+                subprocess.Popen(['xdg-open', target])
         except Exception:
-            self.log(f"📂 Carpeta: {report_dir}")
+            self.log(f"📄 {target}")
 
     def _get_csv_item_ids(self, csv_path):
         if not os.path.exists(csv_path):
@@ -353,9 +335,7 @@ class GrailzeeApp:
                 nuevos = len(df_new)
                 df_new.to_csv(csv_path, index=False)
                 self.log(f"\n✅ {nuevos} items → {os.path.basename(csv_path)}")
-            self._refresh_csvs()
-            self.combo_csv.set(os.path.basename(csv_path))
-            self._on_csv_selected()
+            self._update_latest_info()
         else:
             self.log("\n⚠️ No se obtuvieron resultados nuevos.")
 
@@ -395,16 +375,15 @@ class GrailzeeApp:
 
     def _save_config(self):
         settings["report_dir"] = self.entry_report_dir.get()
-        settings["prefix"] = self.entry_prefix.get()
         settings["oxy_user"] = self.entry_oxy_user.get()
         settings["oxy_pass"] = self.entry_oxy_pass.get()
         settings["webhook_url"] = self.entry_webhook.get().strip()
         save_settings(settings)
-        self._refresh_csvs()
+        self._update_latest_info()
         self._update_usage_ui()
 
     # === Actualización desde GitHub (zip) ===
-    GITHUB_ZIP_URL = "https://github.com/czenteno-ilnia/Grailzee-Scraper/archive/refs/heads/main.zip"
+    GITHUB_ZIP_URL = "https://github.com/czenteno-ilnia/Grailzee-Scraper-Local/archive/refs/heads/main.zip"
 
     def _update_app(self):
         if self._scraping:

@@ -137,11 +137,16 @@ def fetch_oxylabs_html(url, increment_usage_callback: Callable[[], None] | None 
 
     for attempt in range(1, OXYLABS_MAX_RETRIES + 1):
         try:
+            payload = {"source": "universal", "url": url, "geo_location": "United States"}
+            # Escalar: 1er intento barato sin render; si falla, los reintentos fuerzan render de
+            # JS (las páginas de item eBay son JS-pesadas y si no Oxylabs da empty_content a ratos).
+            if attempt > 1:
+                payload["render"] = "html"
             response = requests.post(
                 OXYLABS_API_URL,
                 auth=(OXYLABS_USERNAME, OXYLABS_PASSWORD),
-                json={"source": "universal", "url": url, "geo_location": "United States"},
-                timeout=60,
+                json=payload,
+                timeout=90,
             )
 
             if response.status_code != 200:
