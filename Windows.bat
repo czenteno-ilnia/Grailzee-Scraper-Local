@@ -10,6 +10,18 @@ echo ======================================
 echo  Starting Grailzee Scraper for Windows
 echo ======================================
 
+if not defined GRAILZEE_SKIP_UPDATE (
+    echo Buscando actualizaciones...
+    python -c "import urllib.request; urllib.request.urlretrieve('https://raw.githubusercontent.com/czenteno-ilnia/Grailzee-Scraper-Local/main/update.py','update.py')" 2>nul && python update.py
+)
+
+if not exist "requirements.txt" (
+    echo [ERROR] Falta el codigo de la app y no se pudo descargar.
+    echo Revisa tu conexion a internet y vuelve a abrir.
+    pause
+    exit /b 1
+)
+
 if not exist "%VENV_DIR%" (
     echo Creating virtual environment "%VENV_DIR%"...
     %PYTHON_CMD% -m venv "%VENV_DIR%"

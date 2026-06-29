@@ -74,8 +74,6 @@ class GrailzeeApp:
         self.lbl_usage = ttk.Label(top, text="Oxylabs local: 0 req", font=("Segoe UI", 10))
         self.lbl_usage.pack(side="right", padx=8)
 
-        ttk.Button(top, text="⬇ Actualizar app", command=self._update_app).pack(side="right", padx=8)
-
         ttk.Separator(self.root, orient="horizontal").pack(fill="x", padx=16, pady=4)
 
         body = ttk.Frame(self.root)
@@ -265,6 +263,7 @@ class GrailzeeApp:
         self.log("🔵 Iniciando scraping…")
         scraper_ebay.set_credentials(self.entry_oxy_user.get().strip(), self.entry_oxy_pass.get().strip())
         scraper_ebay.set_webhook(self.entry_webhook.get().strip())
+        scraper_ebay.set_logger(self.log)  # retry/fallos de Oxylabs también al log del UI
 
         csv_path = self._batch_csv_path()
         self.log(f"📂 Reporte de este batch: {os.path.basename(csv_path)}")
@@ -381,64 +380,6 @@ class GrailzeeApp:
         save_settings(settings)
         self._update_latest_info()
         self._update_usage_ui()
-
-    # === Actualización desde GitHub (zip) ===
-    GITHUB_ZIP_URL = "https://github.com/czenteno-ilnia/Grailzee-Scraper-Local/archive/refs/heads/main.zip"
-
-    def _update_app(self):
-        if self._scraping:
-            return messagebox.showinfo("Info", "Espera a que termine el scraping para actualizar.")
-        ok = messagebox.askyesno(
-            "Actualizar app",
-            "¿Descargar la última versión desde GitHub?\n\n"
-            "Tu configuración, reportes y credenciales se conservan.\n"
-            "Al terminar, cierra y vuelve a abrir la app."
-        )
-        if not ok:
-            return
-        threading.Thread(target=self._do_update, daemon=True).start()
-
-    def _do_update(self):
-        import urllib.request, zipfile, tempfile
-        app_dir = os.path.dirname(os.path.abspath(__file__))
-        self.root.after(0, lambda: self.log("⬇ Descargando actualización…"))
-        try:
-            with tempfile.TemporaryDirectory() as tmp:
-                zip_path = os.path.join(tmp, "update.zip")
-                urllib.request.urlretrieve(self.GITHUB_ZIP_URL, zip_path)
-                with zipfile.ZipFile(zip_path) as zf:
-                    zf.extractall(tmp)
-                roots = [os.path.join(tmp, d) for d in os.listdir(tmp)
-                         if os.path.isdir(os.path.join(tmp, d)) and d.lower().startswith("grailzee")]
-                if not roots:
-                    self.root.after(0, lambda: self.log("❌ Update: estructura de zip inesperada"))
-                    return
-                count = self._copy_update(roots[0], app_dir)
-            self.root.after(0, lambda: self.log(f"✅ Actualizado: {count} archivo(s). Reinicia la app."))
-            self.root.after(0, lambda: messagebox.showinfo(
-                "Actualizado", "Listo. Cierra y vuelve a abrir la app para usar la nueva versión."))
-        except Exception as e:
-            self.root.after(0, lambda e=e: self.log(f"❌ Error al actualizar: {e}"))
-
-    def _copy_update(self, src, dst):
-        """Copia solo código nuevo sobre la app. Respeta config, reportes, credenciales y entornos."""
-        import shutil
-        SKIP_DIRS = {".git", "reportes", "logs", "local", "__pycache__",
-                     ".venv_windows", ".venv_unix", ".venv_mac", "env"}
-        SKIP_FILES = {"settings.json", ".env"}
-        ALLOW_EXT = {".py", ".bat", ".sh", ".command", ".txt", ".md"}
-        count = 0
-        for root, dirs, files in os.walk(src):
-            dirs[:] = [d for d in dirs if d not in SKIP_DIRS]
-            rel = os.path.relpath(root, src)
-            target_dir = dst if rel == "." else os.path.join(dst, rel)
-            for f in files:
-                if f in SKIP_FILES or os.path.splitext(f)[1].lower() not in ALLOW_EXT:
-                    continue
-                os.makedirs(target_dir, exist_ok=True)
-                shutil.copy2(os.path.join(root, f), os.path.join(target_dir, f))
-                count += 1
-        return count
 
 if __name__ == "__main__":
     root = tk.Tk()

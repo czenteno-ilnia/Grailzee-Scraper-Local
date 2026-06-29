@@ -48,6 +48,22 @@ def set_webhook(url):
     global WEBHOOK_URL
     WEBHOOK_URL = (url or "").strip()
 
+# Callback opcional para mandar logs al UI (además de la terminal). Lo setea MainApp.
+_UI_LOG = None
+
+def set_logger(fn):
+    global _UI_LOG
+    _UI_LOG = fn
+
+def _emit(msg):
+    """Imprime en terminal y, si hay UI conectada, también en el log del UI."""
+    print(msg)
+    if _UI_LOG:
+        try:
+            _UI_LOG(msg)
+        except Exception:
+            pass
+
 def post_webhook(msg):
     """POST simple a un webhook tipo Discord. No-op si no hay URL. Nunca rompe el scraping."""
     if not WEBHOOK_URL:
@@ -131,7 +147,7 @@ def fetch_oxylabs_html(url, increment_usage_callback: Callable[[], None] | None 
     if not OXYLABS_USERNAME or not OXYLABS_PASSWORD:
         reason = "missing_credentials"
         _log_oxylabs_failure(url, reason)
-        print(f"⚠️ {_oxylabs_user_message(reason)}")
+        _emit(f"⚠️ {_oxylabs_user_message(reason)}")
         post_webhook(f"⚠️ Oxylabs: {_oxylabs_user_message(reason)}")
         return None
 
@@ -154,16 +170,16 @@ def fetch_oxylabs_html(url, increment_usage_callback: Callable[[], None] | None 
                 _log_oxylabs_failure(url, reason, response.status_code, detail=f"attempt={attempt}")
                 # Credenciales/billing = permanente, no tiene sentido reintentar
                 if reason in ("invalid_credentials", "account_limit_or_billing"):
-                    print(f"⚠️ {_oxylabs_user_message(reason)}")
+                    _emit(f"⚠️ {_oxylabs_user_message(reason)}")
                     post_webhook(f"⛔ Oxylabs: {_oxylabs_user_message(reason)}")
                     return None
                 # 429 / 5xx = transitorio → backoff y reintento
                 if attempt < OXYLABS_MAX_RETRIES:
                     wait = 2 ** (attempt - 1)
-                    print(f"⏳ Oxylabs {response.status_code}, reintento {attempt}/{OXYLABS_MAX_RETRIES} en {wait}s…")
+                    _emit(f"⏳ Oxylabs {response.status_code}, reintento {attempt}/{OXYLABS_MAX_RETRIES} en {wait}s…")
                     time.sleep(wait)
                     continue
-                print(f"⚠️ {_oxylabs_user_message(reason)}")
+                _emit(f"⚠️ {_oxylabs_user_message(reason)}")
                 return None
 
             if increment_usage_callback:
@@ -176,10 +192,10 @@ def fetch_oxylabs_html(url, increment_usage_callback: Callable[[], None] | None 
                 _log_oxylabs_failure(url, reason, response.status_code, detail=f"attempt={attempt}")
                 if attempt < OXYLABS_MAX_RETRIES:
                     wait = 2 ** (attempt - 1)
-                    print(f"⏳ Oxylabs sin contenido, reintento {attempt}/{OXYLABS_MAX_RETRIES} en {wait}s…")
+                    _emit(f"⏳ Oxylabs sin contenido, reintento {attempt}/{OXYLABS_MAX_RETRIES} en {wait}s…")
                     time.sleep(wait)
                     continue
-                print(f"⚠️ {_oxylabs_user_message(reason)}")
+                _emit(f"⚠️ {_oxylabs_user_message(reason)}")
                 return None
             return content
 
@@ -188,10 +204,10 @@ def fetch_oxylabs_html(url, increment_usage_callback: Callable[[], None] | None 
             _log_oxylabs_failure(url, reason, detail=f"{type(e).__name__} attempt={attempt}")
             if attempt < OXYLABS_MAX_RETRIES:
                 wait = 2 ** (attempt - 1)
-                print(f"⏳ Error de red, reintento {attempt}/{OXYLABS_MAX_RETRIES} en {wait}s…")
+                _emit(f"⏳ Error de red, reintento {attempt}/{OXYLABS_MAX_RETRIES} en {wait}s…")
                 time.sleep(wait)
                 continue
-            print(f"❌ {_oxylabs_user_message(reason)}")
+            _emit(f"❌ {_oxylabs_user_message(reason)}")
             return None
     return None
 
