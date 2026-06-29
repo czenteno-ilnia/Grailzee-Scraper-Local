@@ -12,6 +12,13 @@ env/
 .env.*.local
 settings.json
 
+# Secrets / credentials (NUNCA commitear)
+credentials.json
+ebay_api_credentials.txt
+ebay_token.json
+*.pem
+*.key
+
 # IDE
 .vscode/
 .idea/
