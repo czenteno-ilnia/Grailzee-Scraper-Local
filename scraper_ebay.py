@@ -29,7 +29,7 @@ LABEL_MAP = {
     "with papers": "Papers",
 }
 
-MAX_WORKERS = 8
+MAX_WORKERS = 5
 
 # Oxylabs Credentials - Will be injected by MainApp
 OXYLABS_USERNAME = ""
