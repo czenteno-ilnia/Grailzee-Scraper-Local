@@ -1,7 +1,9 @@
 import re
 import time
 import json
+import threading
 import urllib.request
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -27,7 +29,7 @@ LABEL_MAP = {
     "with papers": "Papers",
 }
 
-REQUEST_DELAY = 1.0
+MAX_WORKERS = 8
 
 # Oxylabs Credentials - Will be injected by MainApp
 OXYLABS_USERNAME = ""
@@ -143,6 +145,8 @@ def is_search_or_store_url(url):
 # =========================
 # OXYLABS CLIENT
 # =========================
+_USAGE_LOCK = threading.Lock()
+
 def fetch_oxylabs_html(url, increment_usage_callback: Callable[[], None] | None = None):
     if not OXYLABS_USERNAME or not OXYLABS_PASSWORD:
         reason = "missing_credentials"
@@ -183,7 +187,8 @@ def fetch_oxylabs_html(url, increment_usage_callback: Callable[[], None] | None 
                 return None
 
             if increment_usage_callback:
-                increment_usage_callback()
+                with _USAGE_LOCK:
+                    increment_usage_callback()
 
             results = response.json().get("results", [])
             content = results[0].get("content") if results else None
@@ -337,23 +342,31 @@ def scrape_url(url, increment_usage_callback=None, existing_ids=None):
                 print("⚠️ No se encontraron items en la tienda/búsqueda")
                 return empty_result()
 
-            resultados = []
-            for i, item_url in enumerate(item_links, 1):
+            pendientes = []
+            for item_url in item_links:
                 item_id = extract_item_id(item_url)
                 if existing_ids and item_id in existing_ids:
                     print(f"   ⏭️ Ya en DB, saltando: {item_id}")
                     continue
-                print(f"🔍 Scrapeando item {i}/{len(item_links)}: {item_url}")
-                html = fetch_oxylabs_html(item_url, increment_usage_callback)
-                if html:
-                    df = parse_item_html(html, item_url)
-                    if not df.empty:
-                        resultados.append(df)
-                        print(f"   ✔ OK")
-                    else:
-                        print(f"   ⚠️ Sin datos")
-                time.sleep(REQUEST_DELAY)
+                pendientes.append(item_url)
 
+            def _scrape_item(args):
+                i, item_url = args
+                print(f"🔍 Scrapeando item {i}/{len(pendientes)}: {item_url}")
+                html = fetch_oxylabs_html(item_url, increment_usage_callback)
+                if not html:
+                    return None
+                df = parse_item_html(html, item_url)
+                if df.empty:
+                    print(f"   ⚠️ Sin datos: {item_url}")
+                    return None
+                print(f"   ✔ OK: {item_url}")
+                return df
+
+            with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
+                dfs = list(pool.map(_scrape_item, enumerate(pendientes, 1)))
+
+            resultados = [df for df in dfs if df is not None]
             return pd.concat(resultados, ignore_index=True) if resultados else empty_result()
 
         print(f"⚠️ URL de eBay no reconocida: {url}")
