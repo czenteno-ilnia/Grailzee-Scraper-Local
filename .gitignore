@@ -6,6 +6,9 @@ __pycache__/
 venv/
 env/
 
+# Local dedup database (per-machine)
+db/
+
 # Environment
 .env
 .env.local
