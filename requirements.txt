@@ -4,4 +4,3 @@ requests
 selenium
 setuptools
 sv_ttk>=2.6.0
-undetected-chromedriver

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 import time
 
 from bs4 import BeautifulSoup
@@ -14,9 +13,6 @@ BROWSER_HEADERS = {
     ),
     "Accept-Language": "en-US,en;q=0.9",
 }
-
-_UNDETECTED_CHROME_DISABLED = False
-
 
 def _is_blocked_html(html: str) -> bool:
     lowered = html.lower()
@@ -36,32 +32,7 @@ def get_soup_with_requests(url: str) -> BeautifulSoup | None:
 
 
 def get_soup_with_browser(url: str) -> BeautifulSoup:
-    global _UNDETECTED_CHROME_DISABLED
-    from selenium.common.exceptions import WebDriverException
-
-    if os.environ.get("CHRONO24_USE_UNDETECTED") == "1" and not _UNDETECTED_CHROME_DISABLED:
-        try:
-            return _get_soup_with_undetected_chrome(url)
-        except (ImportError, OSError, RuntimeError, WebDriverException) as exc:
-            _UNDETECTED_CHROME_DISABLED = True
-            print(f"undetected Chrome failed, using regular Selenium Chrome: {exc}")
-
     driver = make_selenium_driver()
-    try:
-        return soup_from_driver(driver, url)
-    finally:
-        driver.quit()
-
-
-def _get_soup_with_undetected_chrome(url: str) -> BeautifulSoup:
-    import undetected_chromedriver as uc
-
-    options = uc.ChromeOptions()
-    options.add_argument("--lang=en-US")
-    if os.environ.get("CHRONO24_HEADLESS") == "1":
-        options.add_argument("--headless=new")
-
-    driver = uc.Chrome(options=options)
     try:
         return soup_from_driver(driver, url)
     finally:

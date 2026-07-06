@@ -12,12 +12,6 @@ import sv_ttk
 # === SCRAPERS ===
 import scraper_ebay
 import scraper_chrono24
-import scraper_swisstimepiececo
-import Scraper_Wywatl
-import Scraper_Thewatchoutlet
-import Scraper_Grandcaliber
-import Scraper_Boknowsluxury
-import Scraper_Timepieceperfection
 
 CONFIG_FILE = "settings.json"
 
@@ -37,22 +31,6 @@ def save_settings(data):
         json.dump(data, f, indent=4)
 
 settings = load_settings()
-
-def extract_vendor_name(url):
-    m = re.search(r'[?&]_ssn=([^&]+)', url, re.IGNORECASE)
-    if m: return m.group(1).strip()
-    m = re.search(r'[?&]store_name=([^&]+)', url, re.IGNORECASE)
-    if m: return m.group(1).strip()
-    m = re.search(r'/str/([^/?#]+)', url)
-    if m: return m.group(1).strip()
-    return None
-
-def extract_chrono24_customer_id(url):
-    m = re.search(r'[?&]customerId=([^&]+)', url, re.IGNORECASE)
-    if not m:
-        return None
-    customer_id = re.sub(r"[^A-Za-z0-9_-]", "", m.group(1).strip())
-    return customer_id or None
 
 class GrailzeeApp:
     def __init__(self, root):
@@ -357,12 +335,6 @@ class GrailzeeApp:
         low = url.lower()
         if "ebay" in low: return scraper_ebay.scrape_url(url, increment_usage_callback=self._increment_usage, existing_ids=existing_ids)
         if "chrono24" in low: return scraper_chrono24.scrape_multiple([url], existing_ids=existing_ids, progress_callback=self.log)
-        if "swisstimepiececo" in low or "swiss timepiece" in low: return scraper_swisstimepiececo.scrape_url(url)
-        if "wywatl" in low: return Scraper_Wywatl.scrape_url(url)
-        if "thewatchoutlet" in low: return Scraper_Thewatchoutlet.scrape_url(url)
-        if "grandcaliber" in low: return Scraper_Grandcaliber.scrape_url(url)
-        if "boknowsluxury" in low: return Scraper_Boknowsluxury.scrape_url(url)
-        if "timepieceperfection" in low: return Scraper_Timepieceperfection.scrape_url(url)
         self.log("   ⚠️ Sitio no reconocido")
         return None
 

@@ -11,36 +11,20 @@ except ImportError:
 import MainApp
 
 
-class FakeCombo:
-    def __init__(self, values: list[str], selected: str = "") -> None:
-        self.values = values
-        self.selected = selected
-
-    def __getitem__(self, key: str):
-        if key == "values":
-            return self.values
-        raise KeyError(key)
-
-    def get(self) -> str:
-        return self.selected
-
-    def set(self, value: str) -> None:
-        self.selected = value
-
-
 @pytest.mark.integration
 def test_run_scraper_when_supported_brand_url_is_dispatched(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     app = MainApp.GrailzeeApp.__new__(MainApp.GrailzeeApp)
+    app.log = lambda msg: None
     monkeypatch.setattr(
-        MainApp.Scraper_Grandcaliber,
-        "scrape_url",
-        lambda url: pd.DataFrame([{
+        MainApp.scraper_chrono24,
+        "scrape_multiple",
+        lambda urls, existing_ids=None, progress_callback=None: pd.DataFrame([{
             "Stock": "1",
-            "URL": url,
-            "Make": "Grand Caliber",
-            "Model": "Model",
+            "URL": urls[0],
+            "Make": "Rolex",
+            "Model": "Datejust",
             "Reference Number": "Ref",
             "Year": "2024",
             "Box": "Yes",
@@ -49,10 +33,10 @@ def test_run_scraper_when_supported_brand_url_is_dispatched(
         }]),
     )
 
-    df = app._dispatch("https://www.grandcaliber.com/products/test-watch")
+    df = app._dispatch("https://www.chrono24.com/search/index.htm?customerId=23766&dosearch=true")
 
     assert df is not None
-    assert df.iloc[0]["Make"] == "Grand Caliber"
+    assert df.iloc[0]["Make"] == "Rolex"
 
 
 @pytest.mark.integration

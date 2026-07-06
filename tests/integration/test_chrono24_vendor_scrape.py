@@ -156,9 +156,6 @@ def test_scrape_multiple_when_detail_requests_blocked_uses_browser_helper(monkey
 def test_get_soup_with_browser_uses_regular_selenium_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[str] = []
 
-    def fail_undetected(url: str) -> BeautifulSoup:
-        raise AssertionError(f"undetected Chrome should not run by default: {url}")
-
     def fake_make_driver() -> FakeDriver:
         calls.append("make_driver")
         return FakeDriver(calls)
@@ -167,8 +164,6 @@ def test_get_soup_with_browser_uses_regular_selenium_by_default(monkeypatch: pyt
         calls.append(f"soup:{url}")
         return BeautifulSoup("<html><body>ok</body></html>", "html.parser")
 
-    monkeypatch.delenv("CHRONO24_USE_UNDETECTED", raising=False)
-    monkeypatch.setattr(chrono24_fetch, "_get_soup_with_undetected_chrome", fail_undetected)
     monkeypatch.setattr(chrono24_fetch, "make_selenium_driver", fake_make_driver)
     monkeypatch.setattr(chrono24_fetch, "soup_from_driver", fake_soup_from_driver)
 

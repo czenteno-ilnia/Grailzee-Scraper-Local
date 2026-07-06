@@ -7,8 +7,7 @@ import scraper_ebay
 
 @pytest.mark.integration
 def test_scrape_url_when_ebay_url_has_no_item_id(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(scraper_ebay, "extract_oxylabs_item_links", lambda url: [])
-    monkeypatch.setattr(scraper_ebay, "_extract_item_links_from_search", lambda url: [])
+    monkeypatch.setattr(scraper_ebay, "extract_oxylabs_item_links", lambda url, **kwargs: [])
 
     df = scraper_ebay.scrape_url("https://www.ebay.com/sch/i.html?_nkw=omega")
 

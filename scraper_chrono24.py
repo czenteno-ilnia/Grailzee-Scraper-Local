@@ -48,17 +48,13 @@ def _is_listing_url(url: str) -> bool:
     return "--id" in url and urlsplit(url).path.endswith(".htm")
 
 
-def _normalize_chrono24_url(href: str, base_url: str) -> str:
-    return urljoin(base_url, href)
-
-
 def _extract_listing_urls(soup: BeautifulSoup, page_url: str) -> list[str]:
     urls: list[str] = []
     seen: set[str] = set()
 
     for link in soup.find_all("a", href=True):
         href = str(link["href"])
-        candidate = _strip_tracking(_normalize_chrono24_url(href, page_url))
+        candidate = _strip_tracking(urljoin(page_url, href))
         if _is_listing_url(candidate) and candidate not in seen:
             seen.add(candidate)
             urls.append(candidate)
@@ -76,7 +72,7 @@ def _find_next_page_url(soup: BeautifulSoup, page_url: str) -> str | None:
     if next_link is None:
         return None
 
-    return _normalize_chrono24_url(str(next_link["href"]), page_url)
+    return urljoin(page_url, str(next_link["href"]))
 
 
 def _build_spec_map(soup: BeautifulSoup) -> dict[str, str]:
@@ -166,10 +162,6 @@ def _parse_chrono24_detail(soup: BeautifulSoup, url: str) -> dict[str, str]:
     }
 
 
-def scrape_chrono24(url: str) -> dict[str, str]:
-    return _parse_chrono24_detail(_get_soup(url), url)
-
-
 def _row_from_info(info: dict[str, str]) -> dict[str, str]:
     return {
         "Stock": info.get("Listing code", "Missing"),
@@ -182,10 +174,6 @@ def _row_from_info(info: dict[str, str]) -> dict[str, str]:
         "Papers": info.get("With papers", "Missing"),
         "Original Price": info.get("Price", "Missing"),
     }
-
-
-def _is_empty_detail(info: dict[str, str]) -> bool:
-    return info.get("Listing code", "Missing") == "Missing" and info.get("Brand", "Missing") == "Missing"
 
 
 def _expand_input_url(url: str, progress_callback: ProgressCallback | None = None) -> list[str]:
@@ -228,8 +216,6 @@ def scrape_multiple(
                         progress_callback("   Chrono24: abriendo Chrome/Selenium para detalles")
                     soup = _get_soup_with_browser(listing_url)
                 info = _parse_chrono24_detail(soup, listing_url)
-                if _is_empty_detail(info):
-                    info = scrape_chrono24(listing_url)
                 rows.append(_row_from_info(info))
             except (requests.RequestException, RuntimeError, OSError, ImportError) as exc:
                 error_message = f"ERROR scraping {listing_url}: {exc}"
