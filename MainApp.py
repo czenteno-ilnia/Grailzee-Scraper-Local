@@ -8,6 +8,7 @@ import glob
 from datetime import datetime
 import pandas as pd
 import sv_ttk
+import dedupe as dd
 
 # === SCRAPERS ===
 import scraper_ebay
@@ -245,7 +246,9 @@ class GrailzeeApp:
 
         csv_path = self._batch_csv_path()
         self.log(f"📂 Reporte de este batch: {os.path.basename(csv_path)}")
-        csv_ids = self._get_csv_item_ids(csv_path)
+        csv_ids_csv = self._get_csv_item_ids(csv_path)
+        csv_ids_sql = dd.known_ids()
+        csv_ids = csv_ids_csv | csv_ids_sql
         if csv_ids: self.log(f"📋 {len(csv_ids)} items ya en CSV → se omitirán")
 
         resultados = []

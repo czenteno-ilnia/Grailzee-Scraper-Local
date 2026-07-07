@@ -146,3 +146,7 @@ Other platforms are tried without proxies first (JSON endpoints rarely need them
 - Rate limits or anti-bot measures may cap scraping frequency.
 - Custom seller sites vary widely and need per-site configuration.
 - Mismatched fields (description vs. structured specs) may still need manual cross-validation.
+
+## De-dupe
+Questions:
+- For a first run of a new seller, should we limit scraping to items listed within the last 7-10 days? Or should we capture the full catalog as baseline?
