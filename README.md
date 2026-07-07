@@ -67,18 +67,18 @@ Realistic horizon for the full local tool including testing: ~2 to 2.5 months. A
 
 Planned weekly deliverables, one shippable KPI each, each removing more manual catalog work:
 
-| Week | Deliverable | Team benefit (load lightened) |
-|---|---|---|
-| Now | Chrono24 + eBay scrapers (working) | Two sources already automated |
-| 1 | Shared base: data contract + standardized CSV output | Every source lands in the exact format the spreadsheet expects, no reformatting |
-| 2 | Shopify scraper | Biggest quick win: all Shopify sellers off manual copy-paste in one drop |
-| 3 | WooCommerce scraper | WooCommerce sellers onboarded |
-| 4 | Squarespace scraper | Squarespace sellers onboarded; bulk of API-based sellers now automated |
-| 5 | Deduplication + basic run logging | Weekly re-runs bring only new products; runs are traceable |
-| 6 | First (highest-volume) custom site + basic tests | A bespoke seller automated; tests catch a broken scraper |
-| 7 | Wix scraper | Wix sellers onboarded |
-| 8 | eBay moved to official Browse API | Structured data, no proxy, more reliable and evergreen |
-| 9 and 10 | Remaining custom sites + hardening (retries/backoff, logging, tests) | Edge cases handled, reliable weekly operation, cloud-ready |
+| Week | Deliverable | Sites covered | Team benefit (load lightened) |
+|---|---|---|---|
+| Now | Chrono24 + eBay scrapers (working) | Chrono24 (4): Exclusive Diamonds, Sivils Luxury, Diamond Crush Jewelry Inc, Alux Watches. eBay (16): WWC LLC, Watches of Charlotte, Timepiece of Mind, Watches on Demand, Fusion Jewelers NYC, Yourself Watches, Modern Swiss, Empire Time, Veryspecialbrand, TDTimepieces, Wristocrates/Wrist Flex Timepieces, Trading for Time, Clock Work, QD Watches, Luxe-Source, Elevated Luxe | Two sources already automated |
+| 1 | Shared base: data contract + standardized CSV output | — | Every source lands in the exact format the spreadsheet expects, no reformatting |
+| 2 | Deduplication + basic run logging | — | Weekly re-runs bring only new products; runs are traceable |
+| 3 | Shopify scraper | Shopify (14): Timepiece Perfection, Ben Binyaminov, Only Chrono, Bayam, ElegantSwiss, DJP Jewelers, Bo Knows Luxury, East Coast Jewelry, Swiss Watch And Diamond Exchange, LXY Philly, NW Timepieces, The Watch Outlet, Nagi Jewelers, Time to Trust Watches | Biggest quick win: all Shopify sellers off manual copy-paste in one drop |
+| 4 | Squarespace scraper | Squarespace (3): MVV Watches, Mechanical Art, Elevated Time Watch | Squarespace sellers onboarded; bulk of API-based sellers now automated |
+| 5 | Wix + Elefta scrapers | Wix (1): The Watch Grande. Elefta (2): OT Watch Repair, SwissIce | Wix and Elefta sellers onboarded |
+| 6 | WooCommerce scraper | WooCommerce (2): Pure Timepieces, Sansom Watches | WooCommerce sellers onboarded |
+| 7 | Custom site scrapers + basic tests | Custom (2): SecondTime, Essential-Watches | Bespoke sellers automated; tests catch a broken scraper |
+| 8 | eBay moved to official Browse API | Same 16 eBay sellers, more reliable | Structured data, no proxy, more reliable and evergreen |
+| 9 and 10 | Hardening (retries/backoff, logging, full test coverage) | All sources | Edge cases handled, reliable weekly operation, cloud-ready |
 
 ## Where This Fits (Future)
 

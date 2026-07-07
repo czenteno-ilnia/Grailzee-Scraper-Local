@@ -43,7 +43,7 @@ def _source_from_url(url):
 
 
 def known_ids():
-    """Set of stock_ids and URLs already seen, scrapers retrieve from here."""
+    """Set of stock_ids and URLs already seen"""
     with _connect() as conn:
         rows = conn.execute("SELECT stock_id, url FROM seen").fetchall()
     ids = set()
