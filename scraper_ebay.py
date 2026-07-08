@@ -256,6 +256,9 @@ def parse_item_html(html, url):
         price_match = re.search(r"(?:US\s*)?\$\s?[\d\s.,]+", raw_price)
         price = price_match.group(0).replace(" ", "") if price_match else raw_price
 
+    if not specs and price == MISSING:
+        return empty_result()
+
     stock_el = soup.select_one("div.ux-layout-section__textual-display--itemId span.ux-textspans--BOLD")
     stock = stock_el.get_text(" ", strip=True) if stock_el else extract_item_id(url) or MISSING
 
