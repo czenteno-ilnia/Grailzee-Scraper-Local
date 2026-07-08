@@ -316,6 +316,8 @@ class GrailzeeApp:
                 df_new.to_csv(csv_path, index=False)
                 self.log(f"\n✅ {nuevos} items → {os.path.basename(csv_path)}")
             self._update_latest_info()
+            n_new_db = dd.record_df(df_new)
+            self.log(f"+{n_new_db} items agregados a la db")
         else:
             self.log("\n⚠️ No se obtuvieron resultados nuevos.")
 
