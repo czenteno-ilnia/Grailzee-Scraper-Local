@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 import pandas as pd
 
 COLUMNS = [
-    "Stock", "URL", "Make", "Model", "Reference Number", "Year", "Box", "Papers", "Original Price"
+    "Stock", "URL", "Make", "Model", "Reference Number", "Year", "Box", "Papers", "Original Price", "Customized"
 ]
 MISSING = "Missing information"
 
@@ -26,7 +26,7 @@ LABEL_MAP = {
     "year": "Year", "año": "Year", "ano": "Year", "year manufactured": "Year",
     "box": "Box", "caja": "Box", "with original box": "Box", "with original box/packaging": "Box",
     "papers": "Papers", "papeles": "Papers", "documentación": "Papers", "documentation": "Papers",
-    "with papers": "Papers",
+    "with papers": "Papers", "customized": "Customized", "customization": "Customized"
 }
 
 MAX_WORKERS = 5
@@ -267,6 +267,7 @@ def parse_item_html(html, url):
         "Make": _first_spec(specs, "Make"), "Model": _first_spec(specs, "Model"),
         "Reference Number": _first_spec(specs, "Reference Number"),
         "Year": year, "Box": box_value, "Papers": papers_value, "Original Price": price,
+        "Customized": _first_spec(specs, "Customized"),
     }
     return pd.DataFrame([item], columns=COLUMNS)
 
