@@ -16,6 +16,10 @@ import scraper_chrono24
 
 CONFIG_FILE = "settings.json"
 
+# temp oxy workaround
+OXY_USER = "yearning_31gUm"
+OXY_PASS = "G5oeQR2dmzvvJa+"
+
 def load_settings():
     if not os.path.exists(CONFIG_FILE):
         default = {"report_dir": "reportes", "oxy_usage": {}}
@@ -106,7 +110,7 @@ class GrailzeeApp:
         ttk.Label(oxy_row1, text="Usuario:").pack(side="left", padx=(0, 4))
         self.entry_oxy_user = ttk.Entry(oxy_row1, width=25)
         self.entry_oxy_user.pack(side="left")
-        self.entry_oxy_user.insert(0, settings.get("oxy_user", ""))
+        self.entry_oxy_user.insert(0, OXY_USER)
         self.entry_oxy_user.bind("<KeyRelease>", lambda e: self._update_usage_ui())
 
         oxy_row2 = ttk.Frame(left)
@@ -114,7 +118,7 @@ class GrailzeeApp:
         ttk.Label(oxy_row2, text="Contraseña:").pack(side="left", padx=(0, 4))
         self.entry_oxy_pass = ttk.Entry(oxy_row2, width=25, show="*")
         self.entry_oxy_pass.pack(side="left")
-        self.entry_oxy_pass.insert(0, settings.get("oxy_pass", ""))
+        self.entry_oxy_pass.insert(0, OXY_PASS)
 
         hook_row = ttk.Frame(left)
         hook_row.pack(fill="x", pady=(4, 0))
