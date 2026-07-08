@@ -42,7 +42,7 @@ build/
 output/
 exports/
 *.csv
-reportes/*.csv
+reportes/
 chrono24_output.csv
 
 # Logs
