@@ -24,6 +24,7 @@ COLUMNS = [
     "Box",
     "Papers",
     "Original Price",
+    "Customized",
 ]
 
 BASE_URL = "https://www.chrono24.com"
@@ -173,6 +174,7 @@ def _row_from_info(info: dict[str, str]) -> dict[str, str]:
         "Box": info.get("With box", "Missing"),
         "Papers": info.get("With papers", "Missing"),
         "Original Price": info.get("Price", "Missing"),
+        "Customized": "Missing",
     }
 
 
