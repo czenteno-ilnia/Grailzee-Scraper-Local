@@ -333,7 +333,7 @@ def scrape_url(url, increment_usage_callback=None, existing_ids=None):
         if is_item_url(url):
             item_id = extract_item_id(url)
             if existing_ids and item_id in existing_ids:
-                print(f"   ⏭️ Ya en DB, saltando: {item_id}")
+                _emit(f"   ⏭️ Ya en DB, saltando: {item_id}")
                 return empty_result()
             clean_url = clean_item_url(url)
             print(f"⚙️ Oxylabs: Scrapeando item: {clean_url}")
@@ -350,7 +350,7 @@ def scrape_url(url, increment_usage_callback=None, existing_ids=None):
             for item_url in item_links:
                 item_id = extract_item_id(item_url)
                 if existing_ids and item_id in existing_ids:
-                    print(f"   ⏭️ Ya en DB, saltando: {item_id}")
+                    _emit(f"   ⏭️ Ya en DB, saltando: {item_id}")
                     continue
                 pendientes.append(item_url)
 
