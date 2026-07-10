@@ -14,8 +14,7 @@ SQL concepts used here (one table, four statements):
 import requests
 from datetime import datetime
 
-# TEMP: hardcoded para distribuir via auto-update. Mover a archivo local
-# + rotar token cuando migremos a nube (ver plan.md / memoria).
+# TEMP: until cloud
 TURSO_URL = "libsql://grailzee-items-grail.aws-us-east-1.turso.io"
 TURSO_TOKEN = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODM2MjY2MTMsImlkIjoiMDE5ZjQ4NjYtNzIwMS03ZTEyLTlmNTctZGQwNzRiOGU4ZWI1Iiwia2lkIjoiVVVja2JONmUwNk5lVnh1TTh6VXJxMVlvSm9xNWZLTEJ1XzJZZG9OdDVoOCIsInJpZCI6IjYxMWE2MWUxLWExNzItNDE0OS05M2I5LTUzODdhNjZiNDQ0NyJ9.wcFtfM3QdsPtnwE6gx1EfZGI8aPoesgNeZNzz-DtIOa6GZylJ0cKRSXqHSePppMVMC8qrAtwfioUlqn1QhLBBA"
 
