@@ -12,26 +12,40 @@ SQL concepts used here (one table, four statements):
   SELECT stock_id, url FROM seen  reads everything seen to build the set.
 """
 import os
-import sqlite3
+import json
+import requests
 from datetime import datetime
 
-DB_PATH = os.path.join("db", "seen_ids.sqlite3")
+CREDS_PATH = os.path.join("local", "turso_credentials.json")
+CREATE_TABLE_SQL = """CREATE TABLE IF NOT EXISTS seen (
+    source              TEXT NOT NULL,
+    stock_id            TEXT NOT NULL,
+    url                 TEXT,
+    make                TEXT,
+    model               TEXT,
+    reference_number    TEXT,
+    year                TEXT,
+    box                 TEXT,
+    papers              TEXT,
+    original_price      TEXT,
+    customized          TEXT,
+    first_seen          TEXT,
+    PRIMARY KEY (source, stock_id)
+)"""
 
+def _execute(statements):
+    """statements: dict's list {"sql": ..., "args": [...]}. Send everything in a single HTTP pipeline."""
+    creds = json.load(open(CREDS_PATH))
+    http_url = creds["url"].replace("libsql://", "https://") + "/v2/pipeline"
 
-def _connect():
-    os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS seen (
-               source     TEXT NOT NULL,   -- "ebay", "chrono24", ...
-               stock_id   TEXT NOT NULL,   -- site's canonical ID (item id, listing code)
-               url        TEXT,            -- canonical item URL
-               first_seen TEXT,            -- ISO timestamp of first sighting
-               PRIMARY KEY (source, stock_id)
-           )"""
+    pipeline = [{"type": "execute", "stmt": s} for s in statements] + [{"type": "close"}]
+    resp = requests.post(
+        http_url,
+        headers={"Authorization": f"Bearer {creds['token']}"},
+        json={"requests": pipeline},
     )
-    return conn
-
+    resp.raise_for_status()
+    return resp.json()["results"]
 
 def _source_from_url(url):
     low = str(url).lower()
@@ -44,10 +58,15 @@ def _source_from_url(url):
 
 def known_ids():
     """Set of stock_ids and URLs already seen"""
-    with _connect() as conn:
-        rows = conn.execute("SELECT stock_id, url FROM seen").fetchall()
+    results = _execute([
+        {"sql": CREATE_TABLE_SQL},
+        {"sql": "SELECT stock_id, url FROM seen"},
+    ])
+    select_result = results[1]["response"]["result"]
     ids = set()
-    for stock_id, url in rows:
+    for row in select_result["rows"]:
+        stock_id = row[0]["value"]
+        url = row[1]["value"] if row[1]["type"] != "null" else None
         ids.add(stock_id)
         if url:
             ids.add(url)
@@ -55,18 +74,35 @@ def known_ids():
 
 
 def record_df(df):
-    """Record the rows of a data-contract DataFrame (Stock, URL). Returns how many were actually new (INSERT OR IGNORE skips repeats)."""
+    """Record the rows of a data-contract DataFrame. Returns how many were actually new."""
     if df is None or df.empty or "Stock" not in df.columns:
         return 0
     now = datetime.now().isoformat(timespec="seconds")
-    rows = [
-        (_source_from_url(r.get("URL", "")), str(r["Stock"]), str(r.get("URL", "")), now)
-        for _, r in df.iterrows()
-        if str(r["Stock"]).strip() not in ("", "nan", "Missing information")
-    ]
-    with _connect() as conn:
-        cur = conn.executemany(
-            "INSERT OR IGNORE INTO seen (source, stock_id, url, first_seen) VALUES (?, ?, ?, ?)",
-            rows,
-        )
-        return cur.rowcount
+
+    insert_sql = """INSERT OR IGNORE INTO seen
+        (source, stock_id, url, make, model, reference_number, year, box, papers, original_price, customized, first_seen)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+
+    statements = [{"sql": CREATE_TABLE_SQL}]
+    for _, r in df.iterrows():
+        if str(r["Stock"]).strip() in ("", "nan", "Missing information"):
+            continue
+        args = [
+            _source_from_url(r.get("URL", "")), str(r["Stock"]), str(r.get("URL", "")),
+            str(r.get("Make", "")), str(r.get("Model", "")), str(r.get("Reference Number", "")),
+            str(r.get("Year", "")), str(r.get("Box", "")), str(r.get("Papers", "")),
+            str(r.get("Original Price", "")), str(r.get("Customized", "")), now,
+        ]
+        statements.append({
+            "sql": insert_sql,
+            "args": [{"type": "text", "value": v} for v in args],
+        })
+
+    if len(statements) == 1:
+        return 0
+
+    results = _execute(statements)
+    inserted = sum(
+        1 for r in results[1:len(statements)] if r["response"]["result"]["affected_row_count"] == 1
+    )
+    return inserted
