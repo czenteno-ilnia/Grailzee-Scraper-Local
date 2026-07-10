@@ -11,12 +11,14 @@ SQL concepts used here (one table, four statements):
   INSERT OR IGNORE  if the key already exists, skip the row instead of failing.
   SELECT stock_id, url FROM seen  reads everything seen to build the set.
 """
-import os
-import json
 import requests
 from datetime import datetime
 
-CREDS_PATH = os.path.join("local", "turso_credentials.json")
+# TEMP: hardcoded para distribuir via auto-update. Mover a archivo local
+# + rotar token cuando migremos a nube (ver plan.md / memoria).
+TURSO_URL = "libsql://grailzee-items-grail.aws-us-east-1.turso.io"
+TURSO_TOKEN = "eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJhIjoicnciLCJpYXQiOjE3ODM2MjY2MTMsImlkIjoiMDE5ZjQ4NjYtNzIwMS03ZTEyLTlmNTctZGQwNzRiOGU4ZWI1Iiwia2lkIjoiVVVja2JONmUwNk5lVnh1TTh6VXJxMVlvSm9xNWZLTEJ1XzJZZG9OdDVoOCIsInJpZCI6IjYxMWE2MWUxLWExNzItNDE0OS05M2I5LTUzODdhNjZiNDQ0NyJ9.wcFtfM3QdsPtnwE6gx1EfZGI8aPoesgNeZNzz-DtIOa6GZylJ0cKRSXqHSePppMVMC8qrAtwfioUlqn1QhLBBA"
+
 CREATE_TABLE_SQL = """CREATE TABLE IF NOT EXISTS seen (
     source              TEXT NOT NULL,
     stock_id            TEXT NOT NULL,
@@ -35,13 +37,12 @@ CREATE_TABLE_SQL = """CREATE TABLE IF NOT EXISTS seen (
 
 def _execute(statements):
     """statements: dict's list {"sql": ..., "args": [...]}. Send everything in a single HTTP pipeline."""
-    creds = json.load(open(CREDS_PATH))
-    http_url = creds["url"].replace("libsql://", "https://") + "/v2/pipeline"
+    http_url = TURSO_URL.replace("libsql://", "https://") + "/v2/pipeline"
 
     pipeline = [{"type": "execute", "stmt": s} for s in statements] + [{"type": "close"}]
     resp = requests.post(
         http_url,
-        headers={"Authorization": f"Bearer {creds['token']}"},
+        headers={"Authorization": f"Bearer {TURSO_TOKEN}"},
         json={"requests": pipeline},
     )
     resp.raise_for_status()
