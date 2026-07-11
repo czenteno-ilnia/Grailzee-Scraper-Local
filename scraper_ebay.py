@@ -272,6 +272,8 @@ def parse_item_html(html, url):
             if a.find_parent("li", hidden=True):
                 continue
             text = a.get_text(strip=True)
+            if text.lower().startswith("see more"):
+                continue
             if text and (not crumbs or crumbs[-1] != text):
                 crumbs.append(text)
     category = " > ".join(crumbs) if crumbs else MISSING
