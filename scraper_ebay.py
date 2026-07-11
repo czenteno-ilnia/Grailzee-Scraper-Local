@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 import pandas as pd
 
 COLUMNS = [
-    "Stock", "URL", "Make", "Model", "Reference Number", "Year", "Box", "Papers", "Original Price", "Customized"
+    "Stock", "URL", "Make", "Model", "Reference Number", "Year", "Box", "Papers", "Original Price", "Customized", "Seller"
 ]
 MISSING = "Missing information"
 
@@ -262,12 +262,16 @@ def parse_item_html(html, url):
     stock_el = soup.select_one("div.ux-layout-section__textual-display--itemId span.ux-textspans--BOLD")
     stock = stock_el.get_text(" ", strip=True) if stock_el else extract_item_id(url) or MISSING
 
+    seller_el = soup.select_one("div.x-sellercard-atf__about-seller-item--seller-name span.ux-textspans--BOLD")
+    seller = seller_el.get_text(" ", strip=True) if seller_el else MISSING
+
     item = {
         "Stock": stock, "URL": url,
         "Make": _first_spec(specs, "Make"), "Model": _first_spec(specs, "Model"),
         "Reference Number": _first_spec(specs, "Reference Number"),
         "Year": year, "Box": box_value, "Papers": papers_value, "Original Price": price,
         "Customized": _first_spec(specs, "Customized"),
+        "Seller": seller,
     }
     return pd.DataFrame([item], columns=COLUMNS)
 
