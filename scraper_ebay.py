@@ -265,8 +265,16 @@ def parse_item_html(html, url):
     seller_el = soup.select_one("div.x-sellercard-atf__about-seller-item--seller-name span.ux-textspans--BOLD")
     seller = seller_el.get_text(" ", strip=True) if seller_el else MISSING
 
-    category_els = soup.select("div.x-breadcrumb__wrapper nav a.seo-breadcrumb-text span")
-    category = " > ".join(el.get_text(strip=True) for el in category_els) if category_els else MISSING
+    breadcrumb_nav = soup.select_one("div.x-breadcrumb__wrapper nav")
+    crumbs = []
+    if breadcrumb_nav:
+        for a in breadcrumb_nav.select("a.seo-breadcrumb-text"):
+            if a.find_parent("li", hidden=True):
+                continue
+            text = a.get_text(strip=True)
+            if text and (not crumbs or crumbs[-1] != text):
+                crumbs.append(text)
+    category = " > ".join(crumbs) if crumbs else MISSING
 
     item = {
         "Stock": stock, "URL": url,
