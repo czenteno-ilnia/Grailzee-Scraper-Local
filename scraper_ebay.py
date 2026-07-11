@@ -265,13 +265,16 @@ def parse_item_html(html, url):
     seller_el = soup.select_one("div.x-sellercard-atf__about-seller-item--seller-name span.ux-textspans--BOLD")
     seller = seller_el.get_text(" ", strip=True) if seller_el else MISSING
 
+    category_els = soup.select("div.x-breadcrumb__wrapper nav a.seo-breadcrumb-text span")
+    category = " > ".join(el.get_text(strip=True) for el in category_els) if category_els else MISSING
+
     item = {
         "Stock": stock, "URL": url,
         "Make": _first_spec(specs, "Make"), "Model": _first_spec(specs, "Model"),
         "Reference Number": _first_spec(specs, "Reference Number"),
         "Year": year, "Box": box_value, "Papers": papers_value, "Original Price": price,
         "Customized": _first_spec(specs, "Customized"),
-        "Category": _first_spec(specs, "Category"),
+        "Category": category,
         "Seller": seller,
     }
     return pd.DataFrame([item], columns=COLUMNS)
