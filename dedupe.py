@@ -30,6 +30,7 @@ CREATE_TABLE_SQL = """CREATE TABLE IF NOT EXISTS seen (
     papers              TEXT,
     original_price      TEXT,
     customized          TEXT,
+    category            TEXT,
     seller              TEXT,
     first_seen          TEXT,
     PRIMARY KEY (source, stock_id)
@@ -81,8 +82,8 @@ def record_df(df):
     now = datetime.now().isoformat(timespec="seconds")
 
     insert_sql = """INSERT OR IGNORE INTO seen
-        (source, stock_id, url, make, model, reference_number, year, box, papers, original_price, customized, seller, first_seen)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+        (source, stock_id, url, make, model, reference_number, year, box, papers, original_price, customized, category, seller, first_seen)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
 
     statements = [{"sql": CREATE_TABLE_SQL}]
     for _, r in df.iterrows():
@@ -92,7 +93,7 @@ def record_df(df):
             _source_from_url(r.get("URL", "")), str(r["Stock"]), str(r.get("URL", "")),
             str(r.get("Make", "")), str(r.get("Model", "")), str(r.get("Reference Number", "")),
             str(r.get("Year", "")), str(r.get("Box", "")), str(r.get("Papers", "")),
-            str(r.get("Original Price", "")), str(r.get("Seller", "")), str(r.get("Customized", "")), now,
+            str(r.get("Original Price", "")), str(r.get("Customized", "")), str(r.get("Category", "")), str(r.get("Seller", "")), now,
         ]
         statements.append({
             "sql": insert_sql,
