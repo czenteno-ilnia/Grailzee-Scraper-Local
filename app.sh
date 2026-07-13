@@ -17,14 +17,15 @@ fi
 if [ -z "$GRAILZEE_SKIP_UPDATE" ]; then
     echo "Buscando actualizaciones..."
     UPDATE_PY_URL="https://raw.githubusercontent.com/czenteno-ilnia/Grailzee-Scraper-Local/main/update.py"
-    # curl usa los certificados del sistema (en Mac el urllib de Python suele fallar por certificados)
-    if curl -fsSL -o update.py "$UPDATE_PY_URL" 2>/dev/null \
-       || python3 -c "import urllib.request; urllib.request.urlretrieve('$UPDATE_PY_URL','update.py')" 2>/dev/null; then
+    if ERR=$(curl -fsSL -o update.py "$UPDATE_PY_URL" 2>&1) \
+       || python3 -c "import urllib.request; urllib.request.urlretrieve('$UPDATE_PY_URL','update.py')"; then
         python3 update.py
     else
-        echo "[AVISO] No se pudo actualizar (sin internet o repo no disponible)."
+        echo "[AVISO] No se pudo actualizar. Detalle: $ERR"
     fi
 fi
+
+echo "Codigo del: $(python3 -c "import os,datetime; print(datetime.datetime.fromtimestamp(os.path.getmtime('MainApp.py')).strftime('%Y-%m-%d %H:%M'))" 2>/dev/null || echo '?')"
 
 if [ ! -f "requirements.txt" ] || [ ! -f "MainApp.py" ]; then
     echo "[ERROR] Falta el codigo de la app y no se pudo descargar."
