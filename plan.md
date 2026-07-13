@@ -19,3 +19,12 @@ Move scraped-item tracking from per-machine (`db/seen_ids.sqlite3` local) to a c
 5. [ ] (Phase 2) Create a Google Cloud project.
 6. [ ] (Phase 2) Service account + share sheet as Viewer + daily pull script (`gspread` or `google-api-python-client`).
 7. [ ] (Phase 2) Cross-check logic sheet vs. Turso → gap report.
+
+## Next steps: "Sin datos" + logging (added 2026-07-13)
+
+Goal: no silent failed items in production, and enough signal to find the root cause of
+"Sin datos" on healthy links (5 Oxylabs retries already in place, still happens sometimes).
+
+8. [ ] Diagnose "Sin datos" root cause: map every path that ends in an empty result
+9. [ ] Workaround in production: failed link appears in the batch CSV as a marker row
+10. [ ] New `events` table in Turso (ts, machine, level, stage, stock_id/url, reason, detail) + wiring refactor: every log point in the program (fetch retries, parse failures, dedupe skips, batch summary) also writes a structured row there.
