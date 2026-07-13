@@ -17,8 +17,8 @@ import scraper_chrono24
 CONFIG_FILE = "settings.json"
 
 # temp oxy workaround
-OXY_USER = "yearning_31gUm"
-OXY_PASS = "G5oeQR2dmzvvJa+"
+OXY_USER = "Compress5647_c5Es1"
+OXY_PASS = "YVpBM7f5i++++"
 
 def load_settings():
     if not os.path.exists(CONFIG_FILE):
