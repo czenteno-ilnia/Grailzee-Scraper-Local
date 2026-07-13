@@ -16,7 +16,10 @@ fi
 
 if [ -z "$GRAILZEE_SKIP_UPDATE" ]; then
     echo "Buscando actualizaciones..."
-    if python3 -c "import urllib.request; urllib.request.urlretrieve('https://raw.githubusercontent.com/czenteno-ilnia/Grailzee-Scraper-Local/main/update.py','update.py')" 2>/dev/null; then
+    UPDATE_PY_URL="https://raw.githubusercontent.com/czenteno-ilnia/Grailzee-Scraper-Local/main/update.py"
+    # curl usa los certificados del sistema (en Mac el urllib de Python suele fallar por certificados)
+    if curl -fsSL -o update.py "$UPDATE_PY_URL" 2>/dev/null \
+       || python3 -c "import urllib.request; urllib.request.urlretrieve('$UPDATE_PY_URL','update.py')" 2>/dev/null; then
         python3 update.py
     else
         echo "[AVISO] No se pudo actualizar (sin internet o repo no disponible)."

@@ -8,11 +8,19 @@ Sin dependencias: solo stdlib. ponytail: misma lógica de copia que el botón in
 (_copy_update en MainApp.py); si divergen, este archivo es la fuente para los launchers.
 """
 import os
+import subprocess
 import sys
 import tempfile
 import urllib.request
 import zipfile
 import shutil
+
+
+def _download(url, dest):
+    try:
+        subprocess.run(["curl", "-fsSL", "-o", dest, url], check=True)
+    except Exception:
+        urllib.request.urlretrieve(url, dest)
 
 ZIP_URL = "https://github.com/czenteno-ilnia/Grailzee-Scraper-Local/archive/refs/heads/main.zip"
 
@@ -26,7 +34,7 @@ def update(dst="."):
     dst = os.path.abspath(dst)
     with tempfile.TemporaryDirectory() as tmp:
         zip_path = os.path.join(tmp, "update.zip")
-        urllib.request.urlretrieve(ZIP_URL, zip_path)
+        _download(ZIP_URL, zip_path)
         with zipfile.ZipFile(zip_path) as zf:
             zf.extractall(tmp)
         roots = [os.path.join(tmp, d) for d in os.listdir(tmp)
