@@ -1,8 +1,6 @@
 import re
 import time
-import json
 import threading
-import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
@@ -38,17 +36,10 @@ OXYLABS_API_URL = "https://realtime.oxylabs.io/v1/queries"
 OXYLABS_LOG_PATH = "logs/oxylabs_errors.txt"
 OXYLABS_MAX_RETRIES = 5  # reintentos ante fallos transitorios (429/5xx/red/vacio)
 
-# Webhook opcional (Discord) para visibilidad remota de fallos
-WEBHOOK_URL = ""
-
 def set_credentials(user, pwd):
     global OXYLABS_USERNAME, OXYLABS_PASSWORD
     OXYLABS_USERNAME = user
     OXYLABS_PASSWORD = pwd
-
-def set_webhook(url):
-    global WEBHOOK_URL
-    WEBHOOK_URL = (url or "").strip()
 
 # Callback opcional para mandar logs al UI (además de la terminal). Lo setea MainApp.
 _UI_LOG = None
@@ -65,19 +56,6 @@ def _emit(msg):
             _UI_LOG(msg)
         except Exception:
             pass
-
-def post_webhook(msg):
-    """POST simple a un webhook tipo Discord. No-op si no hay URL. Nunca rompe el scraping."""
-    if not WEBHOOK_URL:
-        return
-    try:
-        data = json.dumps({"content": msg[:1900]}).encode("utf-8")
-        req = urllib.request.Request(
-            WEBHOOK_URL, data=data, headers={"Content-Type": "application/json"}
-        )
-        urllib.request.urlopen(req, timeout=10)
-    except Exception:
-        pass
 
 def empty_result():
     return pd.DataFrame(columns=COLUMNS)
@@ -152,7 +130,6 @@ def fetch_oxylabs_html(url, increment_usage_callback: Callable[[], None] | None 
         reason = "missing_credentials"
         _log_oxylabs_failure(url, reason)
         _emit(f"⚠️ {_oxylabs_user_message(reason)}")
-        post_webhook(f"⚠️ Oxylabs: {_oxylabs_user_message(reason)}")
         return None
 
     for attempt in range(1, OXYLABS_MAX_RETRIES + 1):
@@ -175,7 +152,6 @@ def fetch_oxylabs_html(url, increment_usage_callback: Callable[[], None] | None 
                 # Credenciales/billing = permanente, no tiene sentido reintentar
                 if reason in ("invalid_credentials", "account_limit_or_billing"):
                     _emit(f"⚠️ {_oxylabs_user_message(reason)}")
-                    post_webhook(f"⛔ Oxylabs: {_oxylabs_user_message(reason)}")
                     return None
                 # 429 / 5xx = transitorio → backoff y reintento
                 if attempt < OXYLABS_MAX_RETRIES:

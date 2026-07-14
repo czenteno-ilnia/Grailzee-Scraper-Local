@@ -120,13 +120,6 @@ class GrailzeeApp:
         self.entry_oxy_pass.pack(side="left")
         self.entry_oxy_pass.insert(0, OXY_PASS)
 
-        hook_row = ttk.Frame(left)
-        hook_row.pack(fill="x", pady=(4, 0))
-        ttk.Label(hook_row, text="Webhook (opcional):").pack(side="left", padx=(0, 4))
-        self.entry_webhook = ttk.Entry(hook_row, width=25)
-        self.entry_webhook.pack(side="left")
-        self.entry_webhook.insert(0, settings.get("webhook_url", ""))
-
         ttk.Button(left, text="Guardar config", command=self._save_config).pack(anchor="w", pady=(8, 0))
 
         right = ttk.Frame(body)
@@ -245,7 +238,6 @@ class GrailzeeApp:
         self._scraping = True
         self.log("🔵 Iniciando scraping…")
         scraper_ebay.set_credentials(self.entry_oxy_user.get().strip(), self.entry_oxy_pass.get().strip())
-        scraper_ebay.set_webhook(self.entry_webhook.get().strip())
         scraper_ebay.set_logger(self.log)  # retry/fallos de Oxylabs también al log del UI
 
         csv_path = self._batch_csv_path()
@@ -336,13 +328,6 @@ class GrailzeeApp:
             for u in fallidos:
                 self.log(f"   • {u}")
 
-        # Resumen al webhook (visibilidad remota); no-op si no hay webhook configurado
-        resumen = (f"📊 Batch '{os.path.basename(csv_path)}': {nuevos} nuevos, "
-                   f"{len(fallidos)} sin datos de {len(urls)} URL(s).")
-        if fallidos:
-            resumen += "\nSin datos:\n" + "\n".join(fallidos)
-        scraper_ebay.post_webhook(resumen)
-
         self._set_status("Listo.")
         self._scraping = False
 
@@ -363,7 +348,6 @@ class GrailzeeApp:
         settings["report_dir"] = self.entry_report_dir.get()
         settings["oxy_user"] = self.entry_oxy_user.get()
         settings["oxy_pass"] = self.entry_oxy_pass.get()
-        settings["webhook_url"] = self.entry_webhook.get().strip()
         save_settings(settings)
         self._update_latest_info()
         self._update_usage_ui()
