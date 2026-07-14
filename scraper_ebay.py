@@ -348,13 +348,16 @@ def scrape_url(url, increment_usage_callback=None, existing_ids=None):
             clean_url = clean_item_url(url)
             print(f"⚙️ Oxylabs: Scrapeando item: {clean_url}")
             html = fetch_oxylabs_html(clean_url, increment_usage_callback)
-            return parse_item_html(html, clean_url) if html else empty_result()
+            if not html:
+                return None
+            df = parse_item_html(html, clean_url)
+            return df if not df.empty else None
 
         if is_search_or_store_url(url):
             item_links = extract_oxylabs_item_links(url, increment_usage_callback=increment_usage_callback, existing_ids=existing_ids)
             if not item_links:
                 print("⚠️ No se encontraron items en la tienda/búsqueda")
-                return empty_result()
+                return None
 
             pendientes = []
             for item_url in item_links:
@@ -363,6 +366,10 @@ def scrape_url(url, increment_usage_callback=None, existing_ids=None):
                     _emit(f"   ⏭️ Ya en DB, saltando: {item_id}")
                     continue
                 pendientes.append(item_url)
+
+            if not pendientes:
+                _emit("   ℹ️ Todo ya en DB, nada que scrapear")
+                return empty_result()
 
             def _scrape_item(args):
                 i, item_url = args
@@ -381,11 +388,11 @@ def scrape_url(url, increment_usage_callback=None, existing_ids=None):
                 dfs = list(pool.map(_scrape_item, enumerate(pendientes, 1)))
 
             resultados = [df for df in dfs if df is not None]
-            return pd.concat(resultados, ignore_index=True) if resultados else empty_result()
+            return pd.concat(resultados, ignore_index=True) if resultados else None
 
         print(f"⚠️ URL de eBay no reconocida: {url}")
-        return empty_result()
+        return None
 
     except Exception as e:
         print(f"❌ Error en scrape_url: {e}")
-        return empty_result()
+        return None

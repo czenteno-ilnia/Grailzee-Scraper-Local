@@ -260,20 +260,23 @@ class GrailzeeApp:
                         self.log(f"   📄 ya visto, fila completa desde db (0 requests)")
                         return True
                 df = self._dispatch(url, existing_ids=csv_ids)
-                if df is not None and not df.empty:
-                    if csv_ids and "Stock" in df.columns:
-                        before = len(df)
-                        df = df[~df["Stock"].astype(str).isin(csv_ids)]
-                        if before > len(df):
-                            self.log(f"   ⏭️ {before - len(df)} ya en CSV, omitidos")
-                    if not df.empty:
-                        resultados.append(df)
-                        self.log(f"   ✔ {len(df)} fila(s) nuevas")
-                    else:
-                        self.log("   ℹ️ Todo ya está en el CSV")
+                if df is None:
+                    self.log("   ⚠️ Sin datos")
+                    return False
+                if df.empty:
+                    self.log("   ℹ️ Nada nuevo, todo ya en DB")
                     return True
-                self.log("   ⚠️ Sin datos")
-                return False
+                if csv_ids and "Stock" in df.columns:
+                    before = len(df)
+                    df = df[~df["Stock"].astype(str).isin(csv_ids)]
+                    if before > len(df):
+                        self.log(f"   ⏭️ {before - len(df)} ya en CSV, omitidos")
+                if not df.empty:
+                    resultados.append(df)
+                    self.log(f"   ✔ {len(df)} fila(s) nuevas")
+                else:
+                    self.log("   ℹ️ Todo ya está en el CSV")
+                return True
             except Exception as e:
                 self.log(f"   ❌ Error: {e}")
                 return False
