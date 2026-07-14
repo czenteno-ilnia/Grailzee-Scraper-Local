@@ -34,6 +34,7 @@ Target: "Sin datos" = 0 cases. Every link pasted yields a CSV row — links are 
 11. [ ] New `events` table in Turso (ts, machine, level, stage, stock_id/url, reason, detail) + wiring refactor: every log point in the program (fetch retries, parse failures, dedupe skips, batch summary) also writes a structured row there. Logging via stdlib `logging` + handlers (terminal/UI/Turso).
 
 - [ ] Map seller field from Chrono24
+- [ ] CSV naming: `{seller}_{date}.csv` instead of plain batch date
 - [ ] Seller pagination early-cutoff: force newest-first sort (eBay `_sop=10`, Chrono24 `sortorder=5&pageSize=120`). New seller → extract everything; known seller → stop after N consecutive already-seen items (N = 1 full page).
   - Note: CSV + Turso only persist at batch end a mid-batch cut loses all  scrapes. Fix later: incremental persist (per item or chunk) + scrape links oldest-first (`item_links.reverse()`), so any cut leaves the gap at the newest end, which the next newest-first pagination rediscovers naturally. Do before or with the cutoff.
 
