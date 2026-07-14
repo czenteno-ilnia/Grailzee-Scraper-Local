@@ -16,6 +16,8 @@ Move scraped-item tracking from per-machine (`db/seen_ids.sqlite3` local) to a c
 2. [x] ~~`pip install libsql-experimental`~~ dropped, segfaults on connect with `sync_url`+`auth_token`. Using Turso's HTTP `/v2/pipeline` API via `requests` instead. Verified test working.
 3. [x] Rewrite `dedupe.py`: connect to Turso via HTTP API instead of local sqlite3 (same schema `seen`, now with full item columns).
 4. [x] Local `db/` removed (2026-07-10). No offline cache. Turso is single source of truth.
+
+Secondary:
 5. [ ] (Phase 2) Create a Google Cloud project.
 6. [ ] (Phase 2) Service account + share sheet as Viewer + daily pull script (`gspread` or `google-api-python-client`).
 7. [ ] (Phase 2) Cross-check logic sheet vs. Turso → gap report.
@@ -30,3 +32,9 @@ Target: "Sin datos" = 0 cases. Every link pasted yields a CSV row — links are 
 9. [ ] Diagnose "Sin datos" root cause: map every path that ends in an empty result (Oxylabs fail / empty content / parse finds no specs+price). Dump failing HTML + page <title> to logs — title distinguishes dead listing vs block page vs layout change.
 10. [ ] Workaround per case: dead listing → distinct log + marker in CSV; anything else → retry/fix until it scrapes. "Sin datos" on a healthy link = bug, not an outcome.
 11. [ ] New `events` table in Turso (ts, machine, level, stage, stock_id/url, reason, detail) + wiring refactor: every log point in the program (fetch retries, parse failures, dedupe skips, batch summary) also writes a structured row there. Logging via stdlib `logging` + handlers (terminal/UI/Turso).
+
+- [ ] Map seller field from Chrono24
+
+---
+Notes:
+Do we need to include (sub)categories for Chrono24? Everything is watches
