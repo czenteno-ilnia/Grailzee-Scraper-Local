@@ -28,7 +28,7 @@ Goal: no silent failed items in production, and enough signal to find the root c
 
 Target: "Sin datos" = 0 cases. Every link pasted yields a CSV row — links are manually curated before pasting, so a genuinely dead listing is the only acceptable miss, and that case must be detected and logged as such (not a generic "Sin datos").
 
-8. [ ] Complete CSV via Turso: item already in db → fetch full row from `seen` instead of skipping (`fetch_rows()` in dedupe.py + MainApp wiring). CSV always delivers every pasted link, zero extra Oxylabs requests, survives mid-batch credit cutoffs/restarts.
+8. [x] Complete CSV via Turso: item already in db → fetch full row from `seen` instead of skipping (`fetch_rows()` in dedupe.py + MainApp wiring). CSV always delivers every pasted link, zero extra Oxylabs requests, survives mid-batch credit cutoffs/restarts. Done 2026-07-14, commit `32afdef`.
 9. [ ] Diagnose "Sin datos" root cause: map every path that ends in an empty result (Oxylabs fail / empty content / parse finds no specs+price). Dump failing HTML + page <title> to logs — title distinguishes dead listing vs block page vs layout change.
 10. [ ] Workaround per case: dead listing → distinct log + marker in CSV; anything else → retry/fix until it scrapes. "Sin datos" on a healthy link = bug, not an outcome.
 11. [ ] New `events` table in Turso (ts, machine, level, stage, stock_id/url, reason, detail) + wiring refactor: every log point in the program (fetch retries, parse failures, dedupe skips, batch summary) also writes a structured row there. Logging via stdlib `logging` + handlers (terminal/UI/Turso).
