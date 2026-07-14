@@ -261,6 +261,12 @@ class GrailzeeApp:
             """Scrapea una URL, acumula en resultados. Devuelve True si trajo/encontró datos."""
             self.log(f"\n🔍 {etapa}[{idx}/{total}] {url}")
             try:
+                if url in csv_ids:
+                    df = dd.fetch_rows([url])
+                    if not df.empty:
+                        resultados.append(df)
+                        self.log(f"   📄 ya visto, fila completa desde db (0 requests)")
+                        return True
                 df = self._dispatch(url, existing_ids=csv_ids)
                 if df is not None and not df.empty:
                     if csv_ids and "Stock" in df.columns:

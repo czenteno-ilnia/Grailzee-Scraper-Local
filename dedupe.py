@@ -13,6 +13,8 @@ SQL concepts used here (one table, four statements):
 """
 import requests
 from datetime import datetime
+from scraper_ebay import COLUMNS
+import pandas as pd
 
 # TEMP: until cloud
 TURSO_URL = "libsql://grailzee-items-grail.aws-us-east-1.turso.io"
@@ -108,3 +110,33 @@ def record_df(df):
         1 for r in results[1:len(statements)] if r["response"]["result"]["affected_row_count"] == 1
     )
     return inserted
+
+def fetch_rows(ids):
+    if not ids:
+        return pd.DataFrame(columns=COLUMNS)
+    ids_to_sql = ", ".join(["?"] * len(ids))
+    urls_to_sql = ", ".join(["?"] * len(ids))
+    args = ids + ids
+    results = _execute([{
+        "sql": f"SELECT * FROM seen WHERE stock_id IN ({ids_to_sql}) OR url IN ({urls_to_sql})",
+        "args": [{"type": "text", "value": v} for v in args], 
+        }])
+    items = []
+    rows = results[0]["response"]["result"]
+    for row in rows["rows"]:
+        item = {
+            "Stock": row[1]["value"],
+            "URL": row[2]["value"],
+            "Make": row[3]["value"],
+            "Model": row[4]["value"],
+            "Reference Number": row[5]["value"],
+            "Year": row[6]["value"],
+            "Box": row[7]["value"],
+            "Papers": row[8]["value"],
+            "Original Price": row[9]["value"],
+            "Customized": row[10]["value"],
+            "Category": row[11]["value"],
+            "Seller": row[12]["value"],
+        }
+        items.append(item)
+    return pd.DataFrame(items, columns=COLUMNS)
