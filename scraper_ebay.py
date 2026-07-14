@@ -317,31 +317,40 @@ def extract_next_page_url(html, current_url):
     next_link = soup.select_one('a[aria-label="Next page"], a[aria-label="Next"], a.pagination__next') or soup.find('a', string=lambda text: bool(text and text.strip().lower() == 'next'))
     return uparse.urljoin(current_url, next_link.get('href')) if next_link and next_link.get('href') else None
 
-def extract_oxylabs_item_links(url, max_pages=10, increment_usage_callback=None):
+def extract_oxylabs_item_links(url, max_pages=10, increment_usage_callback=None, existing_ids=None):
     parsed = uparse.urlparse(url)
     qs = uparse.parse_qs(parsed.query)
     qs['_ipg'] = ['240']
+    qs['_sop'] = ['10']
     current_url = uparse.urlunparse(parsed._replace(query=uparse.urlencode(qs, doseq=True)))
-    
+
     seen_pages, seen_items, item_links = set(), set(), []
-    
+
     for page in range(1, max_pages + 1):
         if current_url in seen_pages: break
         seen_pages.add(current_url)
         print(f"⚙️ Oxylabs: Extrayendo links página {page}/{max_pages}: {current_url}")
         html = fetch_oxylabs_html(current_url, increment_usage_callback)
         if not html: break
-        
-        for item_url in extract_item_links_from_search_html(html):
+
+        page_urls = extract_item_links_from_search_html(html)
+        for item_url in page_urls:
             if item_url not in seen_items:
                 seen_items.add(item_url)
                 item_links.append(item_url)
-                
+
+        if existing_ids and page_urls and all(
+            extract_item_id(u) in existing_ids for u in page_urls
+        ):
+            _emit(f"   ✂️ Página {page} completa ya en DB, corto paginación")
+            break
+
         next_url = extract_next_page_url(html, current_url)
         if not next_url: break
         parsed = uparse.urlparse(next_url)
         qs = uparse.parse_qs(parsed.query)
         qs['_ipg'] = ['240']
+        qs['_sop'] = ['10']
         current_url = uparse.urlunparse(parsed._replace(query=uparse.urlencode(qs, doseq=True)))
         
     return item_links
@@ -359,7 +368,7 @@ def scrape_url(url, increment_usage_callback=None, existing_ids=None):
             return parse_item_html(html, clean_url) if html else empty_result()
 
         if is_search_or_store_url(url):
-            item_links = extract_oxylabs_item_links(url, increment_usage_callback=increment_usage_callback)
+            item_links = extract_oxylabs_item_links(url, increment_usage_callback=increment_usage_callback, existing_ids=existing_ids)
             if not item_links:
                 print("⚠️ No se encontraron items en la tienda/búsqueda")
                 return empty_result()
