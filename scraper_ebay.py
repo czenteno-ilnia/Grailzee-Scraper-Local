@@ -28,6 +28,7 @@ LABEL_MAP = {
 }
 
 MAX_WORKERS = 5
+SEEN_STREAK_CUTOFF = 20
 
 # Oxylabs Credentials - Will be injected by MainApp
 OXYLABS_USERNAME = ""
@@ -301,6 +302,7 @@ def extract_oxylabs_item_links(url, max_pages=10, increment_usage_callback=None,
     current_url = uparse.urlunparse(parsed._replace(query=uparse.urlencode(qs, doseq=True)))
 
     seen_pages, seen_items, item_links = set(), set(), []
+    streak = 0
 
     for page in range(1, max_pages + 1):
         if current_url in seen_pages: break
@@ -309,16 +311,21 @@ def extract_oxylabs_item_links(url, max_pages=10, increment_usage_callback=None,
         html = fetch_oxylabs_html(current_url, increment_usage_callback)
         if not html: break
 
-        page_urls = extract_item_links_from_search_html(html)
-        for item_url in page_urls:
+        cut = False
+        for item_url in extract_item_links_from_search_html(html):
+            if existing_ids and extract_item_id(item_url) in existing_ids:
+                streak += 1
+                if streak >= SEEN_STREAK_CUTOFF:
+                    cut = True
+                    break
+            else:
+                streak = 0
             if item_url not in seen_items:
                 seen_items.add(item_url)
                 item_links.append(item_url)
 
-        if existing_ids and page_urls and all(
-            extract_item_id(u) in existing_ids for u in page_urls
-        ):
-            _emit(f"   ✂️ Página {page} completa ya en DB, corto paginación")
+        if cut:
+            _emit(f"   ✂️ {SEEN_STREAK_CUTOFF} items seguidos ya en DB, corto en página {page}")
             break
 
         next_url = extract_next_page_url(html, current_url)

@@ -43,3 +43,4 @@ Paste seller URL → zero "Sin datos". Focus: steps 9-10 above.
 ---
 Notes:
 Do we need to include (sub)categories for Chrono24? Everything is watches
+If a pasted item is already in Turso, do we show it in the csv or not?
