@@ -28,18 +28,21 @@ Goal: no silent failed items in production, and enough signal to find the root c
 
 Target: "Sin datos" = 0 cases. Every link pasted yields a CSV row — links are manually curated before pasting, so a genuinely dead listing is the only acceptable miss, and that case must be detected and logged as such (not a generic "Sin datos").
 
-8. [x] Complete CSV via Turso: item already in db → fetch full row from `seen` instead of skipping (`fetch_rows()` in dedupe.py + MainApp wiring). CSV always delivers every pasted link, zero extra Oxylabs requests, survives mid-batch credit cutoffs/restarts. Done 2026-07-14, commit `32afdef`.
-9. [ ] Diagnose "Sin datos" root cause: map every path that ends in an empty result (Oxylabs fail / empty content / parse finds no specs+price). Dump failing HTML + page <title> to logs — title distinguishes dead listing vs block page vs layout change.
-10. [ ] Workaround per case: dead listing → distinct log + marker in CSV; anything else → retry/fix until it scrapes. "Sin datos" on a healthy link = bug, not an outcome.
+8. [x] Complete CSV via Turso: item already in db → fetch full row from `seen` instead of skipping (`fetch_rows()` in dedupe.py + MainApp wiring). CSV always delivers every pasted link, zero extra Oxylabs requests, survives mid-batch credit cutoffs/restarts.
+9. [x] Failures append a marker row to the CSV ("No se pudo extraer. Comprobar manualmente"). Excluded from Turso and dedupe, so re-pasting retries them. 
+10. [ ] Diagnose "Sin datos" root cause: map every path that ends in an empty result (Oxylabs fail / empty content / parse finds no specs+price). Dump failing HTML + page <title> to logs — title distinguishes dead listing vs block page vs layout 
 11. [ ] New `events` table in Turso (ts, machine, level, stage, stock_id/url, reason, detail) + wiring refactor: every log point in the program (fetch retries, parse failures, dedupe skips, batch summary) also writes a structured row there. Logging via stdlib `logging` + handlers (terminal/UI/Turso).
 
 - [ ] Map seller field from Chrono24
 - [ ] CSV naming: `{seller}_{date}.csv` instead of plain batch date
-- [ ] Seller pagination early-cutoff: force newest-first sort (eBay `_sop=10`, Chrono24 `sortorder=5&pageSize=120`). New seller → extract everything; known seller → stop after N consecutive already-seen items (N = 1 full page).
-  - Note: CSV + Turso only persist at batch end a mid-batch cut loses all  scrapes. Fix later: incremental persist (per item or chunk) + scrape links oldest-first (`item_links.reverse()`), so any cut leaves the gap at the newest end, which the next newest-first pagination rediscovers naturally. Do before or with the cutoff.
+- [x] Seller pagination early-cutoff, eBay: forces `_sop=10` (newest first) + stops after `SEEN_STREAK_CUTOFF = 20` consecutive already-seen items. New seller never triggers it (nothing seen). Verified live: known seller = 1 pagination request instead of full crawl. Raise threshold toward 240 (full page) after sheet backfill.
+- [ ] Same cutoff for Chrono24 (`sortorder=5&pageSize=120` + streak in `collect_listing_urls`). 
+- [ ] Backfill Turso from team sheets.
 
-## Demo day priority (demo 2026-07-15)
-Paste seller URL → zero "Sin datos". Focus: steps 9-10 above.
+
+Maybe:
+- [ ] Add `first_seen` column to CSV output (already in Turso schema). Tells the team new vs old per row.
+  - Note: CSV + Turso only persist at batch end; a mid-batch cut loses all scrapes. Fix later: incremental persist (per item or chunk) + scrape links oldest-first (`item_links.reverse()`), so any cut leaves the gap at the newest end, which the next newest-first pagination rediscovers naturally.
 
 ---
 Notes:
