@@ -35,6 +35,7 @@ OXYLABS_USERNAME = ""
 OXYLABS_PASSWORD = ""
 OXYLABS_API_URL = "https://realtime.oxylabs.io/v1/queries"
 OXYLABS_LOG_PATH = "logs/oxylabs_errors.txt"
+PARSE_LOG_PATH = "logs/parse_failures.txt"
 OXYLABS_MAX_RETRIES = 5  # reintentos ante fallos transitorios (429/5xx/red/vacio)
 
 def set_credentials(user, pwd):
@@ -338,7 +339,7 @@ def extract_oxylabs_item_links(url, max_pages=10, increment_usage_callback=None,
         
     return item_links
 
-def scrape_url(url, increment_usage_callback=None, existing_ids=None):
+def scrape_url(url, increment_usage_callback=None, existing_ids=None, failed_out=None):
     try:
         if is_item_url(url):
             item_id = extract_item_id(url)
@@ -387,7 +388,13 @@ def scrape_url(url, increment_usage_callback=None, existing_ids=None):
             with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
                 dfs = list(pool.map(_scrape_item, enumerate(pendientes, 1)))
 
-            resultados = [df for df in dfs if df is not None]
+            resultados = []
+            for item_url, df in zip(pendientes, dfs):
+                if df is None:
+                    if failed_out is not None:
+                        failed_out.append(item_url)
+                else:
+                    resultados.append(df)
             return pd.concat(resultados, ignore_index=True) if resultados else None
 
         print(f"⚠️ URL de eBay no reconocida: {url}")

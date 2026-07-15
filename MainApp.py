@@ -36,6 +36,7 @@ def save_settings(data):
         json.dump(data, f, indent=4)
 
 settings = load_settings()
+FAILED_NOTE = "No se pudo extraer. Comprobar manualmente"
 
 class GrailzeeApp:
     def __init__(self, root):
@@ -199,6 +200,8 @@ class GrailzeeApp:
             return set()
         try:
             df = pd.read_csv(csv_path)
+            if "Make" in df.columns:
+                df = df[df["Make"] != FAILED_NOTE]
             ids = set(str(s) for s in df["Stock"].dropna())
             if "URL" in df.columns:
                 for url in df["URL"].dropna():
@@ -260,9 +263,13 @@ class GrailzeeApp:
                         resultados.append(df)
                         self.log(f"   📄 ya visto, fila completa desde db (0 requests)")
                         return True
-                df = self._dispatch(url, existing_ids=csv_ids)
+                failed_items = []
+                df = self._dispatch(url, existing_ids=csv_ids, failed_out=failed_items)
+                if failed_items:
+                    fallidos.extend(failed_items)
+                    self.log(f"   ⏳ {len(failed_items)} item(s) sin datos, van a cola de reintento")
                 if df is None:
-                    self.log("   ⚠️ Sin datos")
+                    self.log("   ⚠️ Sin datos" if etapa else "   ⏳ Sin datos, va a cola de reintento")
                     return False
                 if df.empty:
                     self.log("   ℹ️ Nada nuevo, todo ya en DB")
@@ -331,13 +338,28 @@ class GrailzeeApp:
             self.log(f"\n⚠️ {len(fallidos)} URL(s) sin datos tras reintentar:")
             for u in fallidos:
                 self.log(f"   • {u}")
+            df_failed = pd.DataFrame([
+                {c: u if c == "URL" else FAILED_NOTE for c in scraper_ebay.COLUMNS}
+                for u in fallidos
+            ])
+            os.makedirs(os.path.dirname(csv_path), exist_ok=True)
+            if os.path.exists(csv_path):
+                df_existing = pd.read_csv(csv_path)
+                existing_urls = set(str(s) for s in df_existing["URL"].dropna())
+                df_failed = df_failed[~df_failed["URL"].isin(existing_urls)]
+                if not df_failed.empty:
+                    pd.concat([df_existing, df_failed], ignore_index=True).to_csv(csv_path, index=False)
+            else:
+                df_failed.to_csv(csv_path, index=False)
+            if not df_failed.empty:
+                self.log(f"   ➕ {len(df_failed)} fila(s) '{FAILED_NOTE}' agregadas al CSV")
 
         self._set_status("Listo.")
         self._scraping = False
 
-    def _dispatch(self, url, existing_ids=None):
+    def _dispatch(self, url, existing_ids=None, failed_out=None):
         low = url.lower()
-        if "ebay" in low: return scraper_ebay.scrape_url(url, increment_usage_callback=self._increment_usage, existing_ids=existing_ids)
+        if "ebay" in low: return scraper_ebay.scrape_url(url, increment_usage_callback=self._increment_usage, existing_ids=existing_ids, failed_out=failed_out)
         if "chrono24" in low: return scraper_chrono24.scrape_multiple([url], existing_ids=existing_ids, progress_callback=self.log)
         self.log("   ⚠️ Sitio no reconocido")
         return None

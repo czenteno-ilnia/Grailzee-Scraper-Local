@@ -43,5 +43,18 @@ Paste seller URL → zero "Sin datos". Focus: steps 9-10 above.
 
 ---
 Notes:
-Do we need to include (sub)categories for Chrono24? Everything is watches
-If a pasted item is already in Turso, do we show it in the csv or not?
+- Do we need to include (sub)categories for Chrono24? Everything is watches
+- If a pasted item is already in Turso, do we show it in the csv or not?
+
+
+For seller workflow:
+- Return all items, signaling/column(already-scraped)/seen_timestap only new ones
+- Return only new items
+- A checkbox tu toggle between these
+
+Just for items:
+- Return all items, signaling/column(already-scraped)/seen_timestap only new ones
+- Return only new items
+- A checkbox tu toggle between these
+
+What if a user wants to retrieve already scraped data?
