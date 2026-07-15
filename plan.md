@@ -28,7 +28,7 @@ Goal: no silent failed items in production, and enough signal to find the root c
 
 Target: "Sin datos" = 0 cases. Every link pasted yields a CSV row — links are manually curated before pasting, so a genuinely dead listing is the only acceptable miss, and that case must be detected and logged as such (not a generic "Sin datos").
 
-8. [x] Complete CSV via Turso: item already in db → fetch full row from `seen` instead of skipping (`fetch_rows()` in dedupe.py + MainApp wiring). CSV always delivers every pasted link, zero extra Oxylabs requests, survives mid-batch credit cutoffs/restarts.
+8. [x] Dedupe para links individuales (decisión actualizada 2026-07-15): si el item ya existe en Turso o en el CSV del batch, no se devuelve ninguna fila al CSV y no se hace ningún request. El log informa `Este item ya está scrapeado`. Las URLs de seller mantienen su comportamiento: sólo devuelven items nuevos.
 9. [x] Failures append a marker row to the CSV ("No se pudo extraer. Comprobar manualmente"). Excluded from Turso and dedupe, so re-pasting retries them. 
 - [x] Seller pagination early-cutoff, eBay: forces `_sop=10` (newest first) + stops after `SEEN_STREAK_CUTOFF = 20` consecutive already-seen items. New seller never triggers it (nothing seen). Verified live: known seller = 1 pagination request instead of full crawl. Raise threshold toward 240 (full page) after sheet backfill.
 
@@ -49,7 +49,7 @@ Maybe:
 ---
 Notes:
 - Do we need to include (sub)categories for Chrono24? Everything is watches
-- If a pasted item is already in Turso, do we show it in the csv or not?
+- [x] Si un item individual pegado ya está en Turso, no se muestra en el CSV; sólo se informa en logs (decidido 2026-07-15).
 
 
 For seller workflow:
@@ -57,7 +57,6 @@ For seller workflow:
 - Return only new items
 
 Just for items:
-- Return all items, signaling/column(already-scraped)/seen_timestap only new ones
-- Return only new items
+- [x] Return only new items; known items are reported only in logs.
 
 What if a user wants to retrieve already scraped data?

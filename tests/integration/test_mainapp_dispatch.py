@@ -77,3 +77,25 @@ def test_batch_csv_path_defaults_to_timestamp_when_empty(monkeypatch: pytest.Mon
     csv_path = app._batch_csv_path()
     name = csv_path.split("/")[-1]
     assert name.startswith("batch_") and name.endswith(".csv")
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize(
+    ("url", "known_ids", "expected"),
+    [
+        ("https://www.ebay.com/itm/123456?hash=abc", {"123456"}, "123456"),
+        (
+            "https://www.chrono24.com/rolex/datejust--id987654.htm?SETLANG=en_US",
+            {"https://www.chrono24.com/rolex/datejust--id987654.htm"},
+            "https://www.chrono24.com/rolex/datejust--id987654.htm",
+        ),
+        ("https://www.ebay.com/sch/i.html?_nkw=omega", {"123456"}, None),
+        (
+            "https://www.chrono24.com/search/index.htm?customerId=23766",
+            {"https://www.chrono24.com/rolex/datejust--id987654.htm"},
+            None,
+        ),
+    ],
+)
+def test_known_single_item_key_only_matches_direct_items(url, known_ids, expected) -> None:
+    assert MainApp.known_single_item_key(url, known_ids) == expected

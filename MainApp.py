@@ -38,6 +38,17 @@ def save_settings(data):
 settings = load_settings()
 FAILED_NOTE = "No se pudo extraer. Comprobar manualmente"
 
+
+def known_single_item_key(url, existing_ids):
+    """Return the known ID for a direct item URL; seller/search URLs return None."""
+    clean_url = url.split("?")[0]
+    ebay_item_id = scraper_ebay.extract_item_id(url)
+    if ebay_item_id:
+        return ebay_item_id if ebay_item_id in existing_ids else None
+    if "chrono24" in url.lower() and "--id" in clean_url and clean_url.endswith(".htm"):
+        return clean_url if clean_url in existing_ids else None
+    return None
+
 class GrailzeeApp:
     def __init__(self, root):
         self.root = root
@@ -248,7 +259,7 @@ class GrailzeeApp:
         csv_ids_csv = self._get_csv_item_ids(csv_path)
         csv_ids_sql = dd.known_ids()
         csv_ids = csv_ids_csv | csv_ids_sql
-        if csv_ids: self.log(f"📋 {len(csv_ids)} items ya en CSV → se omitirán")
+        if csv_ids: self.log(f"📋 {len(csv_ids)} IDs ya registrados → se omitirán")
 
         resultados = []
 
@@ -256,13 +267,9 @@ class GrailzeeApp:
             """Scrapea una URL, acumula en resultados. Devuelve True si trajo/encontró datos."""
             self.log(f"\n🔍 {etapa}[{idx}/{total}] {url}")
             try:
-                lookup = scraper_ebay.extract_item_id(url) or url.split("?")[0]
-                if lookup in csv_ids:
-                    df = dd.fetch_rows([lookup])
-                    if not df.empty:
-                        resultados.append(df)
-                        self.log(f"   📄 ya visto, fila completa desde db (0 requests)")
-                        return True
+                if known_single_item_key(url, csv_ids):
+                    self.log("   ⏭️ Este item ya está scrapeado; no se agregará al CSV (0 requests)")
+                    return True
                 failed_items = []
                 df = self._dispatch(url, existing_ids=csv_ids, failed_out=failed_items)
                 if failed_items:
