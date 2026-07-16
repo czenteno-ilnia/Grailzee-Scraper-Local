@@ -12,6 +12,20 @@ import MainApp
 
 
 @pytest.mark.integration
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("https://www.ebay.com/itm/123", True),
+        ("http://chrono24.com/watch", True),
+        ("str-item-card__link href", False),
+        ("ebay.com/itm/123", False),
+    ],
+)
+def test_is_valid_url(value: str, expected: bool) -> None:
+    assert MainApp.is_valid_url(value) is expected
+
+
+@pytest.mark.integration
 def test_run_scraper_when_supported_brand_url_is_dispatched(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -77,6 +91,29 @@ def test_batch_csv_path_defaults_to_timestamp_when_empty(monkeypatch: pytest.Mon
     csv_path = app._batch_csv_path()
     name = csv_path.split("/")[-1]
     assert name.startswith("batch_") and name.endswith(".csv")
+
+
+@pytest.mark.integration
+def test_run_scraper_retries_a_failed_url_once(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    app = MainApp.GrailzeeApp.__new__(MainApp.GrailzeeApp)
+    app.entry_report_name = FakeEntry("failed")
+    app.entry_oxy_user = FakeEntry()
+    app.entry_oxy_pass = FakeEntry()
+    app.progress = {}
+    logs: list[str] = []
+    app.log = logs.append
+    app._set_status = lambda status: None
+    app._update_latest_info = lambda: None
+    calls: list[str] = []
+    app._dispatch = lambda url, **kwargs: calls.append(url)
+    monkeypatch.setitem(MainApp.settings, "report_dir", str(tmp_path))
+    monkeypatch.setattr(MainApp.dd, "known_ids", lambda: set())
+
+    app._run_scraper(["https://www.ebay.com/itm/123"], ["str-item-card__link href"])
+
+    assert calls == ["https://www.ebay.com/itm/123"] * 2
+    assert len(pd.read_csv(tmp_path / "failed.csv")) == 1
+    assert logs[-1] == "   • str-item-card__link href"
 
 
 @pytest.mark.integration

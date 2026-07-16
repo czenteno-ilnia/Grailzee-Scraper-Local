@@ -25,6 +25,7 @@ COLUMNS = [
     "Papers",
     "Original Price",
     "Customized",
+    "Seller",
 ]
 
 BASE_URL = "https://www.chrono24.com"
@@ -149,6 +150,7 @@ def _parse_chrono24_detail(soup: BeautifulSoup, url: str) -> dict[str, str]:
     box, papers = _extract_box_papers(specs)
 
     h1 = soup.find("h1")
+    seller = soup.select_one(".js-link-merchant-name")
     return {
         "url": url,
         "Title": h1.get_text(" ", strip=True) if h1 else "Missing",
@@ -160,6 +162,7 @@ def _parse_chrono24_detail(soup: BeautifulSoup, url: str) -> dict[str, str]:
         "Price": _extract_price(soup, specs),
         "With box": box,
         "With papers": papers,
+        "Seller": seller.get_text(" ", strip=True) if seller else "Missing",
     }
 
 
@@ -175,6 +178,7 @@ def _row_from_info(info: dict[str, str]) -> dict[str, str]:
         "Papers": info.get("With papers", "Missing"),
         "Original Price": info.get("Price", "Missing"),
         "Customized": "Missing",
+        "Seller": info.get("Seller", "Missing"),
     }
 
 

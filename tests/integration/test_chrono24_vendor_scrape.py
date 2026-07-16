@@ -25,6 +25,13 @@ DETAIL_HTML = """
 <html><body>
   <h1>Rolex Datejust 36</h1>
   <div data-testid="price">$8,750</div>
+  <div class="m-b-2 d-flex justify-content-between">
+    <div>Professional dealer <span class="flag"><img alt="us"></span></div>
+    <div><span class="rating">5.0</span></div>
+  </div>
+  <button class="js-link-merchant-name p-a-0 link text-bold m-b-1">
+    Sivils Luxury
+  </button>
   <table>
     <tr><th>Listing code</th><td>ABC123</td></tr>
     <tr><th>Brand</th><td>Rolex</td></tr>
@@ -97,6 +104,8 @@ def test_scrape_multiple_when_input_is_vendor_search_url(monkeypatch: pytest.Mon
         "Box": "Yes",
         "Papers": "Yes",
         "Original Price": "$8,750",
+        "Customized": "Missing",
+        "Seller": "Sivils Luxury",
     }]
     assert logs == ["   Chrono24: procesando 1 listings", "   Chrono24: scrapeando item 1/1: https://www.chrono24.com/rolex/datejust-36--id111111.htm"]
 

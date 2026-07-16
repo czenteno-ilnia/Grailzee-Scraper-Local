@@ -6,6 +6,7 @@ import json
 import re
 import glob
 from datetime import datetime
+from urllib.parse import urlparse
 import pandas as pd
 import sv_ttk
 import dedupe as dd
@@ -37,6 +38,11 @@ def save_settings(data):
 
 settings = load_settings()
 FAILED_NOTE = "No se pudo extraer. Comprobar manualmente"
+
+
+def is_valid_url(value):
+    parsed = urlparse(value)
+    return parsed.scheme in ("http", "https") and bool(parsed.netloc)
 
 
 def known_single_item_key(url, existing_ids):
@@ -237,7 +243,9 @@ class GrailzeeApp:
         return os.path.join(report_dir, name)
 
     def start_scraper(self):
-        urls = [u.strip() for u in self.txt_urls.get("1.0", tk.END).strip().split("\n") if u.strip()]
+        entries = [u.strip() for u in self.txt_urls.get("1.0", tk.END).strip().split("\n") if u.strip()]
+        urls = [u for u in entries if is_valid_url(u)]
+        invalid = [u for u in entries if not is_valid_url(u)]
         if not urls:
             return messagebox.showwarning("Advertencia", "Debes ingresar al menos una URL.")
         if self._scraping:
@@ -246,9 +254,9 @@ class GrailzeeApp:
         # Guardar automáticamente la configuración al iniciar
         self._save_config()
         
-        threading.Thread(target=self._run_scraper, args=(urls,), daemon=True).start()
+        threading.Thread(target=self._run_scraper, args=(urls, invalid), daemon=True).start()
 
-    def _run_scraper(self, urls):
+    def _run_scraper(self, urls, invalid=None):
         self._scraping = True
         self.log("🔵 Iniciando scraping…")
         scraper_ebay.set_credentials(self.entry_oxy_user.get().strip(), self.entry_oxy_pass.get().strip())
@@ -276,8 +284,8 @@ class GrailzeeApp:
                     fallidos.extend(failed_items)
                     self.log(f"   ⏳ {len(failed_items)} item(s) sin datos, van a cola de reintento")
                 if df is None:
-                    self.log("   ⚠️ Sin datos" if etapa else "   ⏳ Sin datos, va a cola de reintento")
-                    return False
+                    self.log("   ⚠️ Sin datos")
+                    return bool(failed_items)
                 if df.empty:
                     self.log("   ℹ️ Nada nuevo, todo ya en DB")
                     return True
@@ -305,7 +313,7 @@ class GrailzeeApp:
                 fallidos.append(url)
             self.progress["value"] = i
 
-        # Cola final: reintentar una vez los que no trajeron datos
+        # Oxylabs reintenta errores de transporte; esta cola cubre HTML válido pero no parseable.
         if fallidos:
             self.log(f"\n🔁 Reintentando {len(fallidos)} URL(s) sin datos…")
             pendientes, fallidos = fallidos, []
@@ -360,6 +368,11 @@ class GrailzeeApp:
                 df_failed.to_csv(csv_path, index=False)
             if not df_failed.empty:
                 self.log(f"   ➕ {len(df_failed)} fila(s) '{FAILED_NOTE}' agregadas al CSV")
+
+        if invalid:
+            self.log(f"\n⚠️ {len(invalid)} entrada(s) ignoradas porque no son URLs válidas:")
+            for value in invalid:
+                self.log(f"   • {value}")
 
         self._set_status("Listo.")
         self._scraping = False
