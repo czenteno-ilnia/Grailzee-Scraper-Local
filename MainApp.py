@@ -16,6 +16,7 @@ import scraper_ebay
 import scraper_chrono24
 
 CONFIG_FILE = "settings.json"
+CODE_VERSION = datetime.fromtimestamp(os.path.getmtime(__file__)).strftime("%Y-%m-%d %H:%M")
 
 # temp oxy workaround
 OXY_USER = "Compress5647_c5Es1"
@@ -86,6 +87,7 @@ class GrailzeeApp:
         
         self.lbl_usage = ttk.Label(top, text="Oxylabs local: 0 req", font=("Segoe UI", 10))
         self.lbl_usage.pack(side="right", padx=8)
+        ttk.Label(top, text=f"Código: {CODE_VERSION}", font=("Segoe UI", 9)).pack(side="right", padx=8)
 
         ttk.Separator(self.root, orient="horizontal").pack(fill="x", padx=16, pady=4)
 
