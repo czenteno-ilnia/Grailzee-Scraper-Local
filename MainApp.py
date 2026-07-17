@@ -65,6 +65,7 @@ class GrailzeeApp:
         self._build_ui()
         self._update_latest_info()
         self._update_usage_ui()
+        threading.Thread(target=self._load_sellers, daemon=True).start()
 
     def _build_ui(self):
         top = ttk.Frame(self.root)
@@ -103,8 +104,23 @@ class GrailzeeApp:
 
         ttk.Separator(left, orient="horizontal").pack(fill="x", pady=8)
 
+        ttk.Label(left, text="Histórico", font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(0, 4))
+        hist_row = ttk.Frame(left)
+        hist_row.pack(fill="x", pady=(0, 4))
+        self.cmb_seller = ttk.Combobox(hist_row, width=22, state="readonly")
+        self.cmb_seller.pack(side="left", padx=(0, 6))
+        self.btn_hist = ttk.Button(hist_row, text="📥 Seller", command=self.start_historico)
+        self.btn_hist.pack(side="left", padx=(0, 6))
+        self.btn_hist_all = ttk.Button(hist_row, text="📦 Todo", command=self.start_historico_all)
+        self.btn_hist_all.pack(side="left")
+
+        ttk.Separator(left, orient="horizontal").pack(fill="x", pady=8)
+
         ttk.Label(left, text="Reportes", font=("Segoe UI", 11, "bold")).pack(anchor="w", pady=(0, 4))
-        ttk.Button(left, text="📄 Abrir último reporte", command=self._open_csv).pack(anchor="w", pady=(0, 4))
+        rep_row = ttk.Frame(left)
+        rep_row.pack(fill="x", pady=(0, 4))
+        ttk.Button(rep_row, text="📄 Abrir último reporte", command=self._open_csv).pack(side="left", padx=(0, 6))
+        ttk.Button(rep_row, text="📂 Abrir carpeta", command=self._open_folder).pack(side="left")
 
         self.lbl_csv_info = ttk.Label(left, text="", font=("Segoe UI", 9))
         self.lbl_csv_info.pack(anchor="w", pady=(2, 4))
@@ -157,13 +173,17 @@ class GrailzeeApp:
         self.lbl_status.pack(anchor="w")
 
     def log(self, text):
-        self.txt_log.config(state="normal")
-        self.txt_log.insert(tk.END, text + "\n")
-        self.txt_log.see(tk.END)
-        self.txt_log.config(state="disabled")
+        # Tkinter is not thread-safe; after() queues on the UI thread,
+        # so workers can call log() directly.
+        def _append():
+            self.txt_log.config(state="normal")
+            self.txt_log.insert(tk.END, text + "\n")
+            self.txt_log.see(tk.END)
+            self.txt_log.config(state="disabled")
+        self.root.after(0, _append)
 
     def _set_status(self, text):
-        self.lbl_status.config(text=text)
+        self.root.after(0, lambda: self.lbl_status.config(text=text))
 
     def _update_usage_ui(self):
         user = self.entry_oxy_user.get().strip()
@@ -197,12 +217,7 @@ class GrailzeeApp:
         except Exception:
             self.lbl_csv_info.config(text=f"  ⚠️ Error leyendo {name}")
 
-    def _open_csv(self):
-        report_dir = os.path.abspath(settings.get("report_dir", "reportes"))
-        # Abre el CSV más reciente (por fecha de modificación); si no hay, abre la carpeta
-        target = self._latest_csv(report_dir) or report_dir
-        if not os.path.exists(target):
-            return self.log("⚠️ No hay reportes aún")
+    def _open_path(self, target):
         import subprocess
         try:
             if os.name == 'nt':
@@ -211,6 +226,19 @@ class GrailzeeApp:
                 subprocess.Popen(['xdg-open', target])
         except Exception:
             self.log(f"📄 {target}")
+
+    def _open_csv(self):
+        report_dir = os.path.abspath(settings.get("report_dir", "reportes"))
+        # Opens the most recent CSV (by mtime); if none, opens the folder
+        target = self._latest_csv(report_dir) or report_dir
+        if not os.path.exists(target):
+            return self.log("⚠️ No hay reportes aún")
+        self._open_path(target)
+
+    def _open_folder(self):
+        report_dir = os.path.abspath(settings.get("report_dir", "reportes"))
+        os.makedirs(report_dir, exist_ok=True)
+        self._open_path(report_dir)
 
     def _get_csv_item_ids(self, csv_path):
         if not os.path.exists(csv_path):
@@ -241,6 +269,51 @@ class GrailzeeApp:
         if not name.lower().endswith(".csv"):
             name += ".csv"
         return os.path.join(report_dir, name)
+
+    def _load_sellers(self):
+        try:
+            sellers = sorted(dd.distinct_sellers(), key=str.lower)
+            self.root.after(0, lambda: self.cmb_seller.config(values=sellers))
+        except Exception as e:
+            self.log(f"⚠️ No se pudo cargar la lista de sellers: {e}")
+
+    def start_historico(self):
+        seller = self.cmb_seller.get().strip()
+        if not seller:
+            return messagebox.showwarning("Advertencia", "Elige un seller.")
+        self._start_historico_worker(seller)
+
+    def start_historico_all(self):
+        self._start_historico_worker(None)
+
+    def _start_historico_worker(self, seller):
+        self.btn_hist.config(state="disabled")
+        self.btn_hist_all.config(state="disabled")
+        threading.Thread(target=self._run_historico, args=(seller,), daemon=True).start()
+
+    def _run_historico(self, seller):
+        try:
+            label = f"'{seller}'" if seller else "todos los sellers"
+            self.log(f"\n📥 Pulleando histórico de {label}…")
+            df = dd.fetch_by_seller(seller) if seller else dd.fetch_all()
+            if df.empty:
+                self.log(f"ℹ️ Sin resultados para {label}")
+                return
+            report_dir = settings.get("report_dir", "reportes")
+            os.makedirs(report_dir, exist_ok=True)
+            safe = re.sub(r"[^A-Za-z0-9_-]+", "_", seller).strip("_") if seller else "completo"
+            csv_path = os.path.join(report_dir, f"historico_{safe or 'seller'}_{datetime.now().strftime('%Y%m%d')}.csv")
+            df.to_csv(csv_path, index=False, encoding="utf-8-sig")
+            self.log(f"✅ {len(df)} fila(s) → {os.path.basename(csv_path)}")
+            self._set_status(f"✅ Histórico listo: {len(df)} filas → {os.path.basename(csv_path)}")
+            self.root.after(0, self._update_latest_info)
+        except Exception as e:
+            self.log(f"❌ Error: {e}")
+        finally:
+            def _enable():
+                self.btn_hist.config(state="normal")
+                self.btn_hist_all.config(state="normal")
+            self.root.after(0, _enable)
 
     def start_scraper(self):
         entries = [u.strip() for u in self.txt_urls.get("1.0", tk.END).strip().split("\n") if u.strip()]
@@ -335,17 +408,18 @@ class GrailzeeApp:
                 df_new = df_new[~df_new["Stock"].astype(str).isin(existing_stocks)]
                 nuevos = len(df_new)
                 if not df_new.empty:
-                    pd.concat([df_existing, df_new], ignore_index=True).to_csv(csv_path, index=False)
+                    pd.concat([df_existing, df_new], ignore_index=True).to_csv(csv_path, index=False, encoding="utf-8-sig")
                     self.log(f"\n✅ +{nuevos} nuevos → {os.path.basename(csv_path)}")
                 else:
                     self.log(f"\nℹ️ Sin items nuevos")
             else:
                 nuevos = len(df_new)
-                df_new.to_csv(csv_path, index=False)
+                df_new.to_csv(csv_path, index=False, encoding="utf-8-sig")
                 self.log(f"\n✅ {nuevos} items → {os.path.basename(csv_path)}")
             self._update_latest_info()
             n_new_db = dd.record_df(df_new)
             self.log(f"+{n_new_db} items agregados a la db")
+            self._load_sellers()
         else:
             self.log("\n⚠️ No se obtuvieron resultados nuevos.")
 
@@ -363,9 +437,9 @@ class GrailzeeApp:
                 existing_urls = set(str(s) for s in df_existing["URL"].dropna())
                 df_failed = df_failed[~df_failed["URL"].isin(existing_urls)]
                 if not df_failed.empty:
-                    pd.concat([df_existing, df_failed], ignore_index=True).to_csv(csv_path, index=False)
+                    pd.concat([df_existing, df_failed], ignore_index=True).to_csv(csv_path, index=False, encoding="utf-8-sig")
             else:
-                df_failed.to_csv(csv_path, index=False)
+                df_failed.to_csv(csv_path, index=False, encoding="utf-8-sig")
             if not df_failed.empty:
                 self.log(f"   ➕ {len(df_failed)} fila(s) '{FAILED_NOTE}' agregadas al CSV")
 
@@ -374,7 +448,10 @@ class GrailzeeApp:
             for value in invalid:
                 self.log(f"   • {value}")
 
-        self._set_status("Listo.")
+        if nuevos:
+            self._set_status(f"✅ Batch listo: +{nuevos} items → {os.path.basename(csv_path)}")
+        else:
+            self._set_status("✅ Batch listo: sin items nuevos")
         self._scraping = False
 
     def _dispatch(self, url, existing_ids=None, failed_out=None):

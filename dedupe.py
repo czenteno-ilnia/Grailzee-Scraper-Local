@@ -12,7 +12,6 @@ SQL concepts used here (one table, four statements):
   SELECT stock_id, url FROM seen  reads everything seen to build the set.
 """
 import requests
-from datetime import datetime
 from scraper_ebay import COLUMNS
 import pandas as pd
 
@@ -81,11 +80,9 @@ def record_df(df):
     """Record the rows of a data-contract DataFrame. Returns how many were actually new."""
     if df is None or df.empty or "Stock" not in df.columns:
         return 0
-    now = datetime.now().isoformat(timespec="seconds")
-
     insert_sql = """INSERT OR IGNORE INTO seen
         (source, stock_id, url, make, model, reference_number, year, box, papers, original_price, customized, category, seller, first_seen)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))"""
 
     statements = [{"sql": CREATE_TABLE_SQL}]
     for _, r in df.iterrows():
@@ -95,7 +92,7 @@ def record_df(df):
             _source_from_url(r.get("URL", "")), str(r["Stock"]), str(r.get("URL", "")),
             str(r.get("Make", "")), str(r.get("Model", "")), str(r.get("Reference Number", "")),
             str(r.get("Year", "")), str(r.get("Box", "")), str(r.get("Papers", "")),
-            str(r.get("Original Price", "")), str(r.get("Customized", "")), str(r.get("Category", "")), str(r.get("Seller", "")), now,
+            str(r.get("Original Price", "")), str(r.get("Customized", "")), str(r.get("Category", "")), str(r.get("Seller", "")),
         ]
         statements.append({
             "sql": insert_sql,
@@ -110,6 +107,41 @@ def record_df(df):
         1 for r in results[1:len(statements)] if r["response"]["result"]["affected_row_count"] == 1
     )
     return inserted
+
+def distinct_sellers():
+    """Available sellers, for the historical-pull dropdown."""
+    results = _execute([
+        {"sql": "SELECT DISTINCT seller FROM seen WHERE seller IS NOT NULL AND seller != '' ORDER BY seller"},
+    ])
+    rows = results[0]["response"]["result"]["rows"]
+    return [row[0]["value"] for row in rows]
+
+
+def _fetch_seen(where_sql="", args=None):
+    # Explicit columns, in COLUMNS + [Source, first_seen] order; independent of schema order.
+    results = _execute([{
+        "sql": f"""SELECT stock_id, url, make, model, reference_number, year, box, papers,
+            original_price, customized, category, seller, source, first_seen
+            FROM seen{where_sql}""",
+        "args": [{"type": "text", "value": v} for v in (args or [])],
+    }])
+    rows = results[0]["response"]["result"]["rows"]
+    items = [
+        [cell["value"] if cell["type"] != "null" else "" for cell in row]
+        for row in rows
+    ]
+    return pd.DataFrame(items, columns=COLUMNS + ["Source", "first_seen"])
+
+
+def fetch_by_seller(seller):
+    """Everything already scraped for a seller. Mixes sources on purpose: the Source column disambiguates."""
+    return _fetch_seen(" WHERE seller = ?", [seller])
+
+
+def fetch_all():
+    """The whole seen table, for a full historical export."""
+    return _fetch_seen()
+
 
 def fetch_rows(ids):
     if not ids:
