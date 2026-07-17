@@ -47,6 +47,8 @@ def test_fetch_by_seller(monkeypatch):
 
     assert "SELECT *" not in captured[0]["sql"]
     assert captured[0]["args"] == [{"type": "text", "value": "WatchGuys"}]
+    assert "first_seen DESC" in captured[0]["sql"]
+    assert "first_seen IS NULL" in captured[0]["sql"]
     assert list(df.columns) == dedupe.COLUMNS + ["Source", "first_seen"]
     assert df.iloc[0]["Stock"] == "v0"
     assert df.iloc[0]["Source"] == "v12"

@@ -55,6 +55,17 @@ def known_single_item_key(url, existing_ids):
         return clean_url if clean_url in existing_ids else None
     return None
 
+
+def localize_first_seen(df):
+    """Convert Turso UTC timestamps for human-facing CSV exports."""
+    if "first_seen" not in df.columns:
+        return df
+    df = df.copy()
+    parsed = pd.to_datetime(df["first_seen"], utc=True, errors="coerce")
+    valid = parsed.notna()
+    df.loc[valid, "first_seen"] = parsed[valid].dt.tz_convert("America/Mexico_City").dt.strftime("%Y-%m-%d %H:%M:%S %z")
+    return df
+
 class GrailzeeApp:
     def __init__(self, root):
         self.root = root
@@ -303,6 +314,7 @@ class GrailzeeApp:
             os.makedirs(report_dir, exist_ok=True)
             safe = re.sub(r"[^A-Za-z0-9_-]+", "_", seller).strip("_") if seller else "completo"
             csv_path = os.path.join(report_dir, f"historico_{safe or 'seller'}_{datetime.now().strftime('%Y%m%d')}.csv")
+            df = localize_first_seen(df)
             df.to_csv(csv_path, index=False, encoding="utf-8-sig")
             self.log(f"✅ {len(df)} fila(s) → {os.path.basename(csv_path)}")
             self._set_status(f"✅ Histórico listo: {len(df)} filas → {os.path.basename(csv_path)}")

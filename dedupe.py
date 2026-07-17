@@ -122,7 +122,9 @@ def _fetch_seen(where_sql="", args=None):
     results = _execute([{
         "sql": f"""SELECT stock_id, url, make, model, reference_number, year, box, papers,
             original_price, customized, category, seller, source, first_seen
-            FROM seen{where_sql}""",
+            FROM seen{where_sql}
+            ORDER BY CASE WHEN first_seen IS NULL OR first_seen = '' THEN 1 ELSE 0 END,
+                     first_seen DESC""",
         "args": [{"type": "text", "value": v} for v in (args or [])],
     }])
     rows = results[0]["response"]["result"]["rows"]

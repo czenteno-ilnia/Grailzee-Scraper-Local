@@ -136,3 +136,12 @@ def test_run_scraper_retries_a_failed_url_once(monkeypatch: pytest.MonkeyPatch, 
 )
 def test_known_single_item_key_only_matches_direct_items(url, known_ids, expected) -> None:
     assert MainApp.known_single_item_key(url, known_ids) == expected
+
+
+@pytest.mark.integration
+def test_localize_first_seen_for_mexico_csv() -> None:
+    df = pd.DataFrame({"first_seen": ["2026-07-17T14:37:00Z", ""]})
+
+    result = MainApp.localize_first_seen(df)
+
+    assert result["first_seen"].tolist() == ["2026-07-17 08:37:00 -0600", ""]
