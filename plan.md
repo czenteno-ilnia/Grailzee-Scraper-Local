@@ -1,5 +1,22 @@
 # Plan: centralize backend (week of 2026-07-09)
 
+## 2026-07-16
+
+- [x] Import eBay history: 6,004 covered; 5,586 inserted; rollback logged.
+- [x] Import Chrono24 history: 2,943 covered; 2,859 inserted; rollback logged.
+- [x] Backfill Chrono sellers: 107 updated; 0 blank; rollback logged.
+- [x] Validate visible `WG` rows, IDs, duplicates, conflicts and seller names.
+- [x] Keep marketplace seller identities separate (`source` scopes them).
+- [x] Skip known single-item links from requests/CSV (`2d37920`).
+- [x] Generate new scraper timestamps in Turso UTC; focused test passed.
+
+Pending commits:
+
+- `fix(dedupe): use Turso UTC timestamps` — `dedupe.py`, `tests/unit/test_dedupe.py`
+- `docs: record completed data migrations` — `plan.md`
+
+Keep spreadsheets, migration scripts, reports and rollback logs under ignored `local/`.
+
 ## Objective
 Move scraped-item tracking from per-machine (`db/seen_ids.sqlite3` local) to a central backend.
 
@@ -9,7 +26,7 @@ Move scraped-item tracking from per-machine (`db/seen_ids.sqlite3` local) to a c
 - **Two mechanisms:**
   1. Program records (Turso): what actually got scraped.
   2. Team spreadsheet (Google Sheets): what has already been scraped and submitted by the team to the 'Externals' sheets. Cross-checking both surfaces gaps.
-  Note: Migration of all records to the new Externals sheets approach is still in progress. Estimated completion: next week.
+  Note: Historical eBay and Chrono24 migration completed 2026-07-16.
 
 ## Steps
 1. [x] Turso account, create database, save `url`+`token` in `local/turso_credentials.json` (gitignored).
@@ -35,10 +52,10 @@ Target: "Sin datos" = 0 cases. Every link pasted yields a CSV row — links are 
 
 Pending:
 - [ ] Same cutoff for Chrono24 (`sortorder=5&pageSize=120` + streak in `collect_listing_urls`). 
-- [ ] Backfill Turso from team sheets.
+- [x] Backfill Turso from team sheets (eBay and Chrono24 completed 2026-07-16 with rollback logs).
 10. [ ] Diagnose "Sin datos" root cause: map every path that ends in an empty result (Oxylabs fail / empty content / parse finds no specs+price). Dump failing HTML + page <title> to logs — title distinguishes dead listing vs block page vs layout 
 11. [ ] New `events` table in Turso (ts, machine, level, stage, stock_id/url, reason, detail) + wiring refactor: every log point in the program (fetch retries, parse failures, dedupe skips, batch summary) also writes a structured row there. Logging via stdlib `logging` + handlers (terminal/UI/Turso).
-- [ ] Map seller field from Chrono24
+- [x] Map and backfill seller field from Chrono24 (107 corrected; 0 empty).
 
 
 Maybe:
