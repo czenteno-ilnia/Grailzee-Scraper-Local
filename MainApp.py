@@ -62,10 +62,22 @@ def localize_first_seen(df):
     """Convert Turso UTC timestamps for human-facing CSV exports."""
     if "first_seen" not in df.columns:
         return df
+
+    def localize(value):
+        if pd.isna(value) or not str(value).strip():
+            return value
+        try:
+            timestamp = pd.Timestamp(value)
+        except (TypeError, ValueError):
+            return value
+        if timestamp.tzinfo is None:  # Legacy rows were already written in Mexico local time.
+            timestamp = timestamp.tz_localize("America/Mexico_City")
+        else:
+            timestamp = timestamp.tz_convert("America/Mexico_City")
+        return timestamp.strftime("%Y-%m-%d %H:%M:%S %z")
+
     df = df.copy()
-    parsed = pd.to_datetime(df["first_seen"], utc=True, errors="coerce")
-    valid = parsed.notna()
-    df.loc[valid, "first_seen"] = parsed[valid].dt.tz_convert("America/Mexico_City").dt.strftime("%Y-%m-%d %H:%M:%S %z")
+    df["first_seen"] = df["first_seen"].map(localize)
     return df
 
 class GrailzeeApp:

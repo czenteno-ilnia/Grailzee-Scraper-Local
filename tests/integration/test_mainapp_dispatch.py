@@ -140,8 +140,12 @@ def test_known_single_item_key_only_matches_direct_items(url, known_ids, expecte
 
 @pytest.mark.integration
 def test_localize_first_seen_for_mexico_csv() -> None:
-    df = pd.DataFrame({"first_seen": ["2026-07-17T14:37:00Z", ""]})
+    df = pd.DataFrame({"first_seen": ["2026-07-17T14:37:00Z", "2026-07-16T08:48:50", ""]})
 
     result = MainApp.localize_first_seen(df)
 
-    assert result["first_seen"].tolist() == ["2026-07-17 08:37:00 -0600", ""]
+    assert result["first_seen"].tolist() == [
+        "2026-07-17 08:37:00 -0600",
+        "2026-07-16 08:48:50 -0600",
+        "",
+    ]
