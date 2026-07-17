@@ -5,6 +5,10 @@ cd /d "%~dp0"
 
 set "VENV_DIR=.venv_windows"
 set "PYTHON_CMD=python"
+set "UPDATE_URL=https://raw.githubusercontent.com/czenteno-ilnia/Grailzee-Scraper-Local/main/update.py"
+set "UPDATE_TMP=update.py.tmp"
+
+if exist "%VENV_DIR%\Scripts\python.exe" set "PYTHON_CMD=%VENV_DIR%\Scripts\python.exe"
 
 echo ======================================
 echo  Starting Grailzee Scraper for Windows
@@ -12,7 +16,17 @@ echo ======================================
 
 if not defined GRAILZEE_SKIP_UPDATE (
     echo Buscando actualizaciones...
-    python -c "import urllib.request; urllib.request.urlretrieve('https://raw.githubusercontent.com/czenteno-ilnia/Grailzee-Scraper-Local/main/update.py','update.py')" 2>nul && python update.py
+    curl -fsSL -o "%UPDATE_TMP%" "%UPDATE_URL%" >nul 2>&1
+    if errorlevel 1 (
+        "%PYTHON_CMD%" -c "import urllib.request; urllib.request.urlretrieve(r'%UPDATE_URL%', r'%UPDATE_TMP%')" >nul 2>&1
+    )
+    if errorlevel 1 (
+        del "%UPDATE_TMP%" >nul 2>&1
+        echo [AVISO] No se pudo descargar la actualizacion. Se usara el codigo local.
+    ) else (
+        move /y "%UPDATE_TMP%" update.py >nul
+        "%PYTHON_CMD%" update.py
+    )
 )
 
 if not exist "requirements.txt" (
