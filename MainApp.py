@@ -17,6 +17,7 @@ import scraper_chrono24
 
 CONFIG_FILE = "settings.json"
 CODE_VERSION = datetime.fromtimestamp(os.path.getmtime(__file__)).strftime("%Y-%m-%d %H:%M")
+SELLER_PLACEHOLDER = "Seleccionar seller…"
 
 # temp oxy workaround
 OXY_USER = "Compress5647_c5Es1"
@@ -121,6 +122,7 @@ class GrailzeeApp:
         hist_row = ttk.Frame(left)
         hist_row.pack(fill="x", pady=(0, 4))
         self.cmb_seller = ttk.Combobox(hist_row, width=22, state="readonly")
+        self.cmb_seller.set(SELLER_PLACEHOLDER)
         self.cmb_seller.pack(side="left", padx=(0, 6))
         self.btn_hist = ttk.Button(hist_row, text="📥 Seller", command=self.start_historico)
         self.btn_hist.pack(side="left", padx=(0, 6))
@@ -292,7 +294,7 @@ class GrailzeeApp:
 
     def start_historico(self):
         seller = self.cmb_seller.get().strip()
-        if not seller:
+        if not seller or seller == SELLER_PLACEHOLDER:
             return messagebox.showwarning("Advertencia", "Elige un seller.")
         self._start_historico_worker(seller)
 
