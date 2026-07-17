@@ -36,14 +36,14 @@ fi
 if [ ! -d "$VENV_DIR" ]; then
     echo "Creating virtual environment '$VENV_DIR'..."
     python3 -m venv "$VENV_DIR"
+    source "$VENV_DIR/bin/activate"
+    python -m ensurepip --upgrade >/dev/null 2>&1 || true
+    python -m pip install --upgrade pip
+else
+    source "$VENV_DIR/bin/activate"
 fi
 
-source "$VENV_DIR/bin/activate"
-
-python -m ensurepip --upgrade >/dev/null 2>&1 || true
-
 echo "Installing dependencies..."
-python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 
 echo "Launching MainApp.py..."
