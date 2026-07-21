@@ -25,6 +25,16 @@ Notes:
 - Chrono24 does not use Oxylabs. It tries normal requests first, then falls back to Chrome/Selenium if needed.
 - Google Chrome should be installed for the Chrono24 fallback.
 
+### Shopify manual demo (isolated Turso dedupe)
+
+Run the Linux/Chromebook demo with:
+
+```bash
+GRAILZEE_DEDUPE_TABLE=seen_shopify_test ./app.sh
+```
+
+This lazily creates and uses `seen_shopify_test` only; leave the variable unset for the production `seen` table. Any other value is rejected.
+
 ## Problem
 
 White Glove agents manually visit each seller's catalog, open every product, and copy-paste the data into the "Enterprise Clients" spreadsheet.
