@@ -14,6 +14,8 @@ import dedupe as dd
 # === SCRAPERS ===
 import scraper_ebay
 import scraper_chrono24
+import scraper_shopify
+import shopify_dispatch
 
 CONFIG_FILE = "settings.json"
 CODE_VERSION = datetime.fromtimestamp(os.path.getmtime(__file__)).strftime("%Y-%m-%d %H:%M")
@@ -52,9 +54,14 @@ def known_single_item_key(url, existing_ids):
     clean_url = url.split("?")[0]
     ebay_item_id = scraper_ebay.extract_item_id(url)
     if ebay_item_id:
-        return ebay_item_id if ebay_item_id in existing_ids else None
+        return ebay_item_id if ("ebay", ebay_item_id) in existing_ids else None
     if "chrono24" in url.lower() and "--id" in clean_url and clean_url.endswith(".htm"):
-        return clean_url if clean_url in existing_ids else None
+        return clean_url if ("chrono24", clean_url) in existing_ids else None
+    shopify_product_key = scraper_shopify.direct_product_key(url)
+    if not shopify_product_key:
+        shopify_product_key = scraper_shopify.verified_direct_product_key(url)
+    if shopify_product_key:
+        return shopify_product_key if (dd.SHOPIFY_SOURCE, shopify_product_key) in existing_ids else None
     return None
 
 
@@ -274,13 +281,22 @@ class GrailzeeApp:
             df = pd.read_csv(csv_path)
             if "Make" in df.columns:
                 df = df[df["Make"] != FAILED_NOTE]
-            ids = set(str(s) for s in df["Stock"].dropna())
-            if "URL" in df.columns:
-                for url in df["URL"].dropna():
-                    url_text = str(url).split("?")[0]
-                    ids.add(url_text)
-                    item_id = scraper_ebay.extract_item_id(url_text)
-                    if item_id: ids.add(item_id)
+            ids = set()
+            for _, row in df.iterrows():
+                stock_id = str(row.get("Stock", ""))
+                url = str(row.get("URL", ""))
+                ids.add(dd.identity_from_values(stock_id, url))
+                url_text = url.split("?")[0]
+                if url_text:
+                    ids.add(dd.identity_from_values(url_text, url))
+                item_id = scraper_ebay.extract_item_id(url_text)
+                if item_id:
+                    ids.add(("ebay", item_id))
+                shopify_product_key = scraper_shopify.direct_product_key(url)
+                if not shopify_product_key and dd.identity_from_values(stock_id, url)[0] == dd.SHOPIFY_SOURCE:
+                    shopify_product_key = scraper_shopify.verified_direct_product_key(url)
+                if shopify_product_key:
+                    ids.add((dd.SHOPIFY_SOURCE, shopify_product_key))
             return ids
         except Exception:
             return set()
@@ -392,7 +408,11 @@ class GrailzeeApp:
                     return True
                 if csv_ids and "Stock" in df.columns:
                     before = len(df)
-                    df = df[~df["Stock"].astype(str).isin(csv_ids)]
+                    identities = [
+                        dd.identity_from_values(stock_id, item_url)
+                        for stock_id, item_url in zip(df["Stock"], df["URL"])
+                    ]
+                    df = df[[identity not in csv_ids for identity in identities]]
                     if before > len(df):
                         self.log(f"   ⏭️ {before - len(df)} ya en CSV, omitidos")
                 if not df.empty:
@@ -432,8 +452,15 @@ class GrailzeeApp:
             os.makedirs(os.path.dirname(csv_path), exist_ok=True)
             if os.path.exists(csv_path):
                 df_existing = pd.read_csv(csv_path)
-                existing_stocks = set(str(s) for s in df_existing["Stock"].dropna())
-                df_new = df_new[~df_new["Stock"].astype(str).isin(existing_stocks)]
+                existing_identities = {
+                    dd.identity_from_values(stock_id, item_url)
+                    for stock_id, item_url in zip(df_existing["Stock"], df_existing["URL"])
+                }
+                new_identities = [
+                    dd.identity_from_values(stock_id, item_url)
+                    for stock_id, item_url in zip(df_new["Stock"], df_new["URL"])
+                ]
+                df_new = df_new[[identity not in existing_identities for identity in new_identities]]
                 nuevos = len(df_new)
                 if not df_new.empty:
                     pd.concat([df_existing, df_new], ignore_index=True).to_csv(csv_path, index=False, encoding="utf-8-sig")
@@ -484,8 +511,14 @@ class GrailzeeApp:
 
     def _dispatch(self, url, existing_ids=None, failed_out=None):
         low = url.lower()
-        if "ebay" in low: return scraper_ebay.scrape_url(url, increment_usage_callback=self._increment_usage, existing_ids=existing_ids, failed_out=failed_out)
-        if "chrono24" in low: return scraper_chrono24.scrape_multiple([url], existing_ids=existing_ids, progress_callback=self.log)
+        if "ebay" in low:
+            ebay_ids = dd.ids_for_source(existing_ids, "ebay") if existing_ids else None
+            return scraper_ebay.scrape_url(url, increment_usage_callback=self._increment_usage, existing_ids=ebay_ids, failed_out=failed_out)
+        if "chrono24" in low:
+            chrono24_ids = dd.ids_for_source(existing_ids, "chrono24") if existing_ids else None
+            return scraper_chrono24.scrape_multiple([url], existing_ids=chrono24_ids, progress_callback=self.log)
+        if shopify_dispatch.is_shopify_url_candidate(url):
+            return shopify_dispatch.retrieve_shopify_rows(url, retrieve_products=scraper_shopify.retrieve_shopify_products, log=self.log)
         self.log("   ⚠️ Sitio no reconocido")
         return None
 
